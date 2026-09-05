@@ -1,1 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>slinon — a weekly podcast about your portfolio</title>
+<meta name="description" content="slinon connects every account you own and turns this week's numbers, filings and decisions into a twelve-minute episode about what you actually hold." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
 
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="/">
+      <img src="assets/slinon-logo.png" alt="slinon" />
+      <span class="mono tag">private beta</span>
+    </a>
+    <nav class="nav">
+      <a href="#episode">The episode</a>
+      <a href="#accounts">Accounts</a>
+      <a href="#compare">Compare</a>
+    </nav>
+    <a class="btn" href="#signup">Get sample episode</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero wrap">
+    <div class="hero-copy">
+      <p class="mono eyebrow">Every Monday, 6:00am</p>
+      <h1>Your whole portfolio,<br />explained out loud.</h1>
+      <p class="lead">slinon connects every account you hold — brokerage, retirement, crypto, the old one you forgot about — and turns this week's numbers, filings and decisions into a twelve-minute episode about what <em>you</em> own. One place for the data and the analysis. You listen on the drive in and you're done researching.</p>
+      <form class="signup" data-signup>
+        <input type="email" name="email" placeholder="you@work.com" aria-label="Email address" required />
+        <button class="btn" type="submit">Get sample episode</button>
+      </form>
+      <p class="mono note" data-note>One free episode. Read-only access. No card.</p>
+    </div>
+
+    <aside class="player" aria-label="Sample episode player">
+      <div class="player-head">
+        <span class="player-art" aria-hidden="true"></span>
+        <span class="player-meta">
+          <strong>Your Week — Sep 7</strong>
+          <span class="mono">11:48 · 4 accounts · 2 things to decide</span>
+        </span>
+        <button class="play" type="button" data-play aria-label="Play sample episode">&#9654;</button>
+      </div>
+      <div class="wave" data-wave aria-hidden="true"></div>
+      <div class="mono times"><span data-elapsed>0:00</span><span data-remaining>-11:48</span></div>
+      <ol class="chapters">
+        <li><span class="mono">0:00</span><span>Where you stand this week</span></li>
+        <li><span class="mono">1:40</span><span>The two positions that moved you</span></li>
+        <li><span class="mono">4:15</span><span>Marex earnings, in plain terms</span></li>
+        <li><span class="mono">7:02</span><span>Concentration creeping up in tech</span></li>
+        <li><span class="mono">9:20</span><span>Dates and decisions before Friday</span></li>
+      </ol>
+    </aside>
+  </section>
+
+  <section class="strip" id="accounts">
+    <div class="wrap strip-inner">
+      <p class="mono strip-label">Reads, never touches</p>
+      <ul class="pills">
+        <li>Schwab</li><li>Fidelity</li><li>Interactive Brokers</li><li>Vanguard</li>
+        <li>Robinhood</li><li>Coinbase</li><li>Wealthfront</li><li>401(k) providers</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="wrap block" id="episode">
+    <h2>What the twelve minutes contains</h2>
+    <p class="sub">Same six segments every week, generated only from positions you actually hold. Nothing about a stock you don't own.</p>
+    <div class="grid-3 boxed">
+      <article><p class="mono num">01</p><h3>Where you stand</h3><p>Total value, week's change, and which accounts drove it — stated, not charted.</p></article>
+      <article><p class="mono num">02</p><h3>Your movers</h3><p>The two or three positions that actually changed your number, and why they moved.</p></article>
+      <article><p class="mono num">03</p><h3>Filings and earnings</h3><p>Results from companies you hold, translated into what it means for your stake.</p></article>
+      <article><p class="mono num">04</p><h3>Risk drift</h3><p>Concentration, sector overlap and cash levels sliding away from where you set them.</p></article>
+      <article><p class="mono num">05</p><h3>Process you need to know</h3><p>Vesting dates, dividend and ex-div dates, tax-loss windows, rebalancing triggers.</p></article>
+      <article><p class="mono num">06</p><h3>Before Friday</h3><p>The short list of things worth a decision this week — and what happens if you skip them.</p></article>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap steps">
+      <div>
+        <h2>Four minutes of setup, then nothing</h2>
+        <p class="sub">It arrives in the podcast app you already use. There is no dashboard to remember to open.</p>
+      </div>
+      <ol class="step-list">
+        <li><span class="step-n">1</span><div><strong>Link your accounts</strong><p>Read-only connections to brokerages, retirement plans and exchanges. Four minutes, once.</p></div></li>
+        <li><span class="step-n">2</span><div><strong>Say how you invest</strong><p>Horizon, risk appetite, what you don't want to hear about. It shapes every episode.</p></div></li>
+        <li><span class="step-n">3</span><div><strong>Listen Monday</strong><p>The episode lands in your podcast app at 6am. Same feed, same time, twelve minutes.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="wrap block" id="compare">
+    <h2>Everything else is about somebody else's money</h2>
+    <p class="sub wide">Market podcasts broadcast to everyone. Trackers show numbers and explain nothing. A chat assistant only answers the question you knew to ask. A robo-advisor decides for you and tells you almost nothing. slinon starts from your holdings and ends in your ears.</p>
+    <div class="table-scroll">
+      <table class="compare">
+        <thead>
+          <tr>
+            <th scope="col"></th>
+            <th scope="col" class="us">slinon</th>
+            <th scope="col">Financial news podcasts</th>
+            <th scope="col">Portfolio trackers</th>
+            <th scope="col">AI chat assistants</th>
+            <th scope="col">Robo-advisors</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">About your actual holdings</th><td class="us">Always</td><td>Market-wide</td><td>Numbers only</td><td>If you ask right</td><td>It just decides</td></tr>
+          <tr><th scope="row">Listen while commuting</th><td class="us">Audio-first</td><td>Yes</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><th scope="row">All accounts in one place</th><td class="us">Yes</td><td>—</td><td>Some</td><td>—</td><td>Only theirs</td></tr>
+          <tr><th scope="row">Explains the reasoning</th><td class="us">Every segment</td><td>Generic</td><td>—</td><td>Uneven</td><td>Opaque</td></tr>
+          <tr><th scope="row">Flags dates and actions</th><td class="us">Weekly</td><td>—</td><td>Rarely</td><td>If prompted</td><td>Quarterly note</td></tr>
+          <tr><th scope="row">Effort from you each week</th><td class="us">None</td><td>Filter it yourself</td><td>Check and interpret</td><td>Write prompts</td><td>None, no insight</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap two-col">
+      <div>
+        <h2 class="h2-sm">Read-only, and we mean it</h2>
+        <p class="sub">Accounts link through the same read-only aggregation layer your budgeting app uses. slinon can see positions and transactions. It cannot move money, place an order, or change a setting.</p>
+        <ul class="ticks">
+          <li>Read-only by architecture — no trading or transfer permissions exist in our integration</li>
+          <li>Credentials never touch our servers; tokens are bank-grade encrypted at rest</li>
+          <li>Your holdings are never sold, shared, or used to train third-party models</li>
+          <li>Delete your data and every generated episode in one click, any time</li>
+        </ul>
+      </div>
+      <div class="faq">
+        <details><summary><span class="mono">+</span>Is this financial advice?</summary><p>No. Episodes explain what happened in your portfolio and what's scheduled. They don't tell you to buy or sell, and we're not licensed to.</p></details>
+        <details><summary><span class="mono">+</span>Where does the analysis come from?</summary><p>Market data, filings and company disclosures, matched against your positions, then written and narrated. Sources are listed in the episode notes.</p></details>
+        <details><summary><span class="mono">+</span>What if my accounts don't connect?</summary><p>You can add holdings manually — ticker and size is enough — and mix manual with linked accounts in one episode.</p></details>
+        <details><summary><span class="mono">+</span>Can I change the length or focus?</summary><p>Yes. Pick five, twelve or twenty-five minutes, and mute topics you don't care about. The structure stays the same.</p></details>
+        <details><summary><span class="mono">+</span>Which app does it play in?</summary><p>A private feed you paste into Apple Podcasts, Spotify, Overcast or anything else. No new app required.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta" id="signup">
+    <div class="wrap cta-inner">
+      <p class="mono eyebrow">900 beta seats</p>
+      <h2 class="h2-lg">Hear an episode about your own money.</h2>
+      <p class="lead center">Link one account and we'll produce a real episode from your real holdings, free. If it doesn't save you an hour, walk away.</p>
+      <form class="signup center-form" data-signup>
+        <input type="email" name="email" placeholder="you@work.com" aria-label="Email address" required />
+        <button class="btn" type="submit">Get sample episode</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <span class="brand">
+      <img src="assets/slinon-logo.png" alt="slinon" />
+      <span class="mono">slinon.me</span>
+    </span>
+    <a href="#compare">Compare</a>
+    <a href="#accounts">Security</a>
+    <a href="#signup">Sample episode</a>
+    <span class="disclaimer">Informational only. Not investment advice.</span>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
