@@ -1,0 +1,10 @@
+{
+  "description": "Receive personalized daily audio briefings tailored to your investment portfolio and interests, designed for Israeli self-directed investors.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
