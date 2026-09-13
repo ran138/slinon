@@ -1,0 +1,35 @@
+[
+  {
+    "id": "item-1",
+    "topicKind": "holding",
+    "topicLabel": "NVDA",
+    "occurredAt": "2026-09-12T14:00:00.000Z",
+    "headline": "Nvidia unveils next-gen AI chip, shares rise 4%",
+    "summary": "Nvidia announced its next-generation AI accelerator at a hardware event, with analysts citing strong early demand signals. The stock closed up 4% following the announcement.",
+    "numericFacts": [{ "label": "stock_change", "value": "4", "unit": "%" }],
+    "sourceUrl": "https://example.com/nvidia-chip",
+    "sourceName": "Example Wire"
+  },
+  {
+    "id": "item-2",
+    "topicKind": "holding",
+    "topicLabel": "NVDA",
+    "occurredAt": "2026-09-11T09:30:00.000Z",
+    "headline": "Nvidia supplier reports minor shipment delays",
+    "summary": "A key Nvidia component supplier reported minor shipment delays due to a logistics issue, with no confirmed impact on Nvidia's own production schedule so far.",
+    "numericFacts": [],
+    "sourceUrl": "https://example.com/nvidia-supplier",
+    "sourceName": "Example Wire"
+  },
+  {
+    "id": "item-3",
+    "topicKind": "interest",
+    "topicLabel": "ריבית בנק ישראל",
+    "occurredAt": "2026-09-12T08:00:00.000Z",
+    "headline": "Bank of Israel holds interest rate at 4.5%",
+    "summary": "The Bank of Israel's monetary committee voted to keep the benchmark interest rate unchanged at 4.5%, citing stable inflation figures.",
+    "numericFacts": [{ "label": "interest_rate", "value": "4.5", "unit": "%" }],
+    "sourceUrl": "https://example.com/boi-rate",
+    "sourceName": "Example Wire"
+  }
+]
