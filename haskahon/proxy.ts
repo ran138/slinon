@@ -1,10 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
-  const host = (request.headers.get("host") ?? "").toLowerCase().replace(/^\[|\]$/g, "").split(":")[0];
-  // if (!new Set(["127.0.0.1", "localhost", "::1"]).has(host)) {
-  //   return NextResponse.json({ error: "local_access_only" }, { status: 403 });
-  // }
+  // Keep a single middleware entry point for future domain-level policies.
+  // The application is intentionally available on the public Vercel hostname.
+  void request;
   return NextResponse.next();
 }
 

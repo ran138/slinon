@@ -3,14 +3,15 @@ import "./globals.css";
 import { WebMCPTools } from "@/components/webmcp-tools";
 
 export const metadata: Metadata = {
-  title: "חסכהון — הבריף הפיננסי האישי שלך",
+  metadataBase: new URL("https://www.slinon.me"),
+  title: "Slinon — עדכון פיננסי אישי בעברית",
   description: "חדשות השוק שנוגעות לתיק ולתחומי העניין שלך, בבריף קולי בעברית.",
   other: {
     "codex-preview": "development",
   },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/home/assets/slinon-logo.png",
+    shortcut: "/home/assets/slinon-logo.png",
   },
 };
 

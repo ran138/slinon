@@ -31,6 +31,15 @@ All durable local state is created under `data/`, which is ignored by source con
 
 Back up that directory to preserve the profile and archive. The API key is never stored there.
 
+On Vercel, the application automatically uses `/tmp/haskahon` so server routes can run on the read-only serverless filesystem. That directory is ephemeral and should only be used for previews. Set `HASKAHON_DATA_DIR` to a writable mounted volume for durable deployments, or replace the SQLite and file adapters with managed database and object storage services.
+
+## Public routes
+
+- `/` — Slinon product page, mirrored from `on_slinon_page`
+- `/marketing` — marketing website, mirrored from `marketing_page`
+- `/app` — the functional VESTORY application
+- `/api` — application server routes
+
 ## Commands
 
 - `npm run dev` — run locally on loopback port 5173

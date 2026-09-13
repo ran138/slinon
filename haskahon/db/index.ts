@@ -5,7 +5,12 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
 
-const dataDir = path.join(process.cwd(), "data");
+const configuredDataDir = process.env.HASKAHON_DATA_DIR?.trim();
+const dataDir = configuredDataDir
+  ? path.resolve(configuredDataDir)
+  : process.env.VERCEL
+    ? path.join("/tmp", "haskahon")
+    : path.join(process.cwd(), "data");
 fs.mkdirSync(path.join(dataDir, "audio"), { recursive: true });
 const cache = globalThis as typeof globalThis & { __haskahonSqlite?: Database.Database };
 const sqlite = cache.__haskahonSqlite ?? new Database(path.join(dataDir, "haskahon.sqlite"));
