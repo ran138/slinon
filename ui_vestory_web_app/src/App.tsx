@@ -2000,7 +2000,7 @@ function DashboardScreen({ holdings, watchlist: _watchlist, interests, onNav }: 
           <h1 className="text-3xl font-bold" style={{ color: "var(--color-text)" }}>בוקר טוב</h1>
         </div>
 
-        <div className="grid gap-6" style={{ gridTemplateColumns: "1fr 300px" }}>
+        <div className="grid gap-6 responsive-aside-grid" style={{ gridTemplateColumns: "1fr 300px" }}>
 
           {/* ── Main column ── */}
           <div className="space-y-5">
@@ -2340,7 +2340,7 @@ function PlayerScreen({ onNav }: { onNav: (s: Screen) => void }) {
           חזרה ללוח היום
         </button>
 
-        <div className="grid gap-8" style={{ gridTemplateColumns: "1fr 280px" }}>
+        <div className="grid gap-8 responsive-aside-grid" style={{ gridTemplateColumns: "1fr 280px" }}>
           {/* Player */}
           <div>
             {/* Header */}

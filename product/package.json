@@ -1,0 +1,37 @@
+{
+  "name": "vestory-product",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 5175",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1 --port 5175",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "db:schema": "node --env-file-if-exists=.env.local scripts/apply-supabase-schema.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "music-metadata": "^11.15.0",
+    "next": "16.2.6",
+    "openai": "^7.13.0",
+    "postgres": "^3.4.9",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3"
+  },
+  "type": "module"
+}

@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 50% -20%, #202040 0, transparent 36%), #080910;
+  color: #f7f7fb;
+  font-family: Arial, "Noto Sans Hebrew", sans-serif;
+}
+button, a, input, textarea { font: inherit; }
+a { color: inherit; text-decoration: none; }
+
+/* Global Tailwind preflight-adjacent icon reset conflicts with inline
+   width/height on raw <svg> elements inside the app shell; scope it off. */
+.vestory-ui svg { width: auto; height: auto; }
+
+.animate-spin-slow { animation: spin-slow 1.1s linear infinite; }
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+@keyframes waveform { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+
+/* The dashboard/player two-column layouts use a fixed-px aside column
+   (300px/280px) inline, which overflows narrow viewports. Stack to one
+   column below the point where the aside no longer comfortably fits. */
+@media (max-width: 860px) {
+  .responsive-aside-grid { grid-template-columns: 1fr !important; }
+}

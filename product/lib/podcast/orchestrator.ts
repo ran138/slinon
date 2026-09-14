@@ -1,5 +1,5 @@
 import "server-only";
-import { rawDb } from "@/db";
+import { getSupabaseAdmin, assertSupabase } from "./supabaseAdmin";
 import { fetchCollectedItems } from "./dataSource";
 import { generatePodcastScript } from "./generate";
 import { synthesizePodcastAudio } from "./synthesize";
@@ -54,8 +54,9 @@ export interface CreatePodcastBriefResult {
 
 /**
  * Standalone pipeline — not wired into lib/briefs.ts or any API route yet
- * (deliberately, per plan). Produces a real, playable brief using the
- * existing `briefs`/`chapters`/`sources` tables, so the existing
+ * (deliberately; this is the not-yet-finished next backend version).
+ * Produces a real, playable brief using the existing
+ * `briefs`/`chapters`/`sources` Supabase tables, so the existing
  * getBrief()/player can read its output once this is wired in.
  *
  * Three steps, each its own module: fetch+generate+verify the script
@@ -64,6 +65,7 @@ export interface CreatePodcastBriefResult {
  * `briefs`/`chapters` row bookkeeping around them.
  */
 export async function createPodcastBrief(input: GeneratePodcastInput): Promise<CreatePodcastBriefResult> {
+  const supabase = getSupabaseAdmin();
   const items = await fetchCollectedItems(topicsFromProfile(input.profile), input.windowStart, input.windowEnd);
 
   const cacheKey = computeCacheKey({
@@ -73,12 +75,16 @@ export async function createPodcastBrief(input: GeneratePodcastInput): Promise<C
     itemIds: items.map((item) => item.id),
   });
 
-  const cachedBriefId = getCachedBriefId(cacheKey);
+  const cachedBriefId = await getCachedBriefId(cacheKey);
   if (cachedBriefId) {
-    const existing = rawDb
-      .prepare("SELECT id FROM briefs WHERE id = ? AND status = 'completed'")
-      .get(cachedBriefId);
-    if (existing) return { briefId: cachedBriefId, cached: true };
+    const existing = await supabase
+      .from("briefs")
+      .select("id")
+      .eq("id", cachedBriefId)
+      .eq("status", "completed")
+      .maybeSingle();
+    assertSupabase(existing.error, "check cached brief");
+    if (existing.data) return { briefId: cachedBriefId, cached: true };
   }
 
   const { script, itemsUsed } = await generatePodcastScript(input);
@@ -93,43 +99,67 @@ async function persistBriefAndSynthesize(
   input: GeneratePodcastInput,
   cacheKey: string,
 ): Promise<string> {
+  const supabase = getSupabaseAdmin();
   const itemsById = new Map(itemsUsed.map((item) => [item.id, item]));
 
   const briefId = crypto.randomUUID();
   const now = new Date().toISOString();
 
-  rawDb
-    .prepare(
-      "INSERT INTO briefs (id,status,progress,stage_label,title,profile_snapshot,target_minutes,created_at,started_at) VALUES (?,?,?,?,?,?,?,?,?)",
-    )
-    .run(
-      briefId,
-      "synthesizing",
-      60,
-      "מקליטים את פרקי הבריף",
-      script.title,
-      JSON.stringify(input),
-      input.profile.targetMinutes,
-      now,
-      now,
-    );
-
-  const insertChapter = rawDb.prepare(
-    "INSERT INTO chapters (id,brief_id,position,title,script,reason_kind,reason_label,start_ms) VALUES (?,?,?,?,?,?,?,?)",
-  );
-  const chapterRecords = script.chapters.map((chapter, position) => {
-    const canonical = canonicalReason(chapter, input.profile);
-    const id = crypto.randomUUID();
-    insertChapter.run(id, briefId, position, chapter.title, chapter.script, canonical.reasonKind, canonical.reasonLabel, 0);
-    return { id, position, script: chapter.script, sourceItemIds: chapter.sourceItemIds };
+  const created = await supabase.from("briefs").insert({
+    id: briefId,
+    status: "synthesizing",
+    progress: 60,
+    stage_label: "מקליטים את פרקי הבריף",
+    title: script.title,
+    profile_snapshot: input,
+    target_minutes: input.profile.targetMinutes,
+    created_at: now,
+    started_at: now,
   });
+  assertSupabase(created.error, "create brief");
+
+  const chapterInsert = await supabase
+    .from("chapters")
+    .insert(
+      script.chapters.map((chapter, position) => {
+        const canonical = canonicalReason(chapter, input.profile);
+        return {
+          id: crypto.randomUUID(),
+          brief_id: briefId,
+          position,
+          title: chapter.title,
+          script: chapter.script,
+          reason_kind: canonical.reasonKind,
+          reason_label: canonical.reasonLabel,
+          start_ms: 0,
+        };
+      }),
+    )
+    .select("id,position,script")
+    .order("position");
+  assertSupabase(chapterInsert.error, "save chapters");
+
+  const chapterRecords = (chapterInsert.data ?? []).map((row, index) => ({
+    id: row.id as string,
+    position: row.position as number,
+    script: row.script as string,
+    sourceItemIds: script.chapters[index]?.sourceItemIds ?? [],
+  }));
 
   const { totalDurationMs } = await synthesizePodcastAudio(briefId, chapterRecords, itemsById);
 
-  rawDb
-    .prepare("UPDATE briefs SET status='completed', progress=100, stage_label=?, duration_ms=?, completed_at=? WHERE id=?")
-    .run("הבריף מוכן", totalDurationMs, new Date().toISOString(), briefId);
+  const completed = await supabase
+    .from("briefs")
+    .update({
+      status: "completed",
+      progress: 100,
+      stage_label: "הבריף מוכן",
+      duration_ms: totalDurationMs,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", briefId);
+  assertSupabase(completed.error, "complete brief");
 
-  setCachedBriefId(cacheKey, briefId);
+  await setCachedBriefId(cacheKey, briefId);
   return briefId;
 }

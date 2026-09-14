@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { CollectedItem, PodcastScript, VerificationVerdict } from "./types";
 import { verificationVerdictSchema } from "./types";
-import { PROHIBITED_ADVICE_PATTERN, resolveVerifyModel } from "./constants";
+import { LATIN_LETTERS_PATTERN, PROHIBITED_ADVICE_PATTERN, resolveVerifyModel } from "./constants";
 import { buildVerificationPrompt } from "./prompt";
 
 /** Free check: every cited item id must actually exist in the fetched data. */
@@ -33,7 +33,6 @@ export function checkProhibitedPhrases(script: PodcastScript): string[] {
  *  the prompt asks for Hebrew phonetic spelling instead, since a TTS engine
  *  will otherwise mispronounce or skip Latin-script text. Free, catches
  *  slips without spending an API call. */
-const LATIN_LETTERS_PATTERN = /[A-Za-z]/;
 export function checkLatinScriptLeakage(script: PodcastScript): string[] {
   const problems: string[] = [];
   script.chapters.forEach((chapter, index) => {

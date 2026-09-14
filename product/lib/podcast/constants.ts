@@ -20,3 +20,10 @@ export function resolveVerifyModel(): string {
 // sync manually since that file isn't edited by this module.
 export const PROHIBITED_ADVICE_PATTERN =
   /(^|[.!?]\s*)(קנה|מכור|כדאי לקנות|כדאי למכור|buy|sell)(\s|[.!?])/i;
+
+// Latin letters in the spoken text (unconverted ticker/acronym/English word) —
+// the prompt asks for Hebrew phonetic spelling instead, since a TTS engine
+// will otherwise mispronounce or skip Latin-script text. Shared between
+// verify.ts (flags it) and generate.ts (locates and removes the offending
+// sentence during the sentence-level repair pass).
+export const LATIN_LETTERS_PATTERN = /[A-Za-z]/;
