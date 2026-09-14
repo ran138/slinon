@@ -1,13 +1,9 @@
 import "server-only";
-import fs from "node:fs/promises";
-import path from "node:path";
 import OpenAI from "openai";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { parseBuffer } from "music-metadata";
-import { eq } from "drizzle-orm";
-import { audioRoot, db, rawDb } from "@/db";
-import { assets, interests, settings } from "@/db/schema";
+import { AUDIO_BUCKET, assertSupabase, getSupabaseAdmin } from "@/db";
 import type { BriefView } from "@/lib/domain";
 
 const scriptSchema = z.object({
@@ -20,23 +16,38 @@ const scriptSchema = z.object({
   })).min(3).max(8),
 });
 
-type ProfileSnapshot = { assets: Array<{ kind: string; name: string; symbol: string }>; interests: Array<{ label: string }>; targetMinutes: number };
-const activeJobs = (globalThis as typeof globalThis & { __vestoryJobs?: Map<string, Promise<void>> }).__vestoryJobs ?? new Map<string, Promise<void>>();
+type ProfileSnapshot = {
+  assets: Array<{ kind: string; name: string; symbol: string }>;
+  interests: Array<{ label: string }>;
+  targetMinutes: number;
+};
+
+const activeJobs = (globalThis as typeof globalThis & { __vestoryJobs?: Map<string, Promise<void>> }).__vestoryJobs
+  ?? new Map<string, Promise<void>>();
 (globalThis as typeof globalThis & { __vestoryJobs?: Map<string, Promise<void>> }).__vestoryJobs = activeJobs;
 
-function update(id: string, status: string, progress: number, label: string) {
-  rawDb.prepare("UPDATE briefs SET status = ?, progress = ?, stage_label = ?, started_at = COALESCE(started_at, ?) WHERE id = ?").run(status, progress, label, new Date().toISOString(), id);
+async function update(id: string, status: string, progress: number, stageLabel: string) {
+  const { error } = await getSupabaseAdmin().from("briefs").update({
+    status, progress, stage_label: stageLabel, started_at: new Date().toISOString(),
+  }).eq("id", id);
+  assertSupabase(error, "update brief progress");
 }
 
 function safeUrl(value: string) {
-  try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? url.toString() : null; } catch { return null; }
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function collectCitations(value: unknown, found = new Map<string, string>()) {
   if (!value || typeof value !== "object") return found;
   const obj = value as Record<string, unknown>;
   if (obj.type === "url_citation" && typeof obj.url === "string") {
-    const url = safeUrl(obj.url); if (url) found.set(url, typeof obj.title === "string" ? obj.title : new URL(url).hostname);
+    const url = safeUrl(obj.url);
+    if (url) found.set(url, typeof obj.title === "string" ? obj.title : new URL(url).hostname);
   }
   for (const child of Object.values(obj)) {
     if (Array.isArray(child)) child.forEach((item) => collectCitations(item, found));
@@ -46,20 +57,40 @@ function collectCitations(value: unknown, found = new Map<string, string>()) {
 }
 
 export async function createBrief() {
-  const [prefs] = await db.select().from(settings).where(eq(settings.id, 1));
+  const supabase = getSupabaseAdmin();
+  const [settings, assets, interests] = await Promise.all([
+    supabase.from("settings").select("target_minutes").eq("id", 1).maybeSingle(),
+    supabase.from("assets").select("kind,name,symbol"),
+    supabase.from("interests").select("label"),
+  ]);
+  assertSupabase(settings.error, "load settings");
+  assertSupabase(assets.error, "load assets");
+  assertSupabase(interests.error, "load interests");
   const profile: ProfileSnapshot = {
-    assets: (await db.select().from(assets)).map(({ kind, name, symbol }) => ({ kind, name, symbol })),
-    interests: (await db.select().from(interests)).map(({ label }) => ({ label })),
-    targetMinutes: prefs?.targetMinutes ?? 7,
+    assets: assets.data ?? [],
+    interests: interests.data ?? [],
+    targetMinutes: settings.data?.target_minutes ?? 7,
   };
-  if (!profile.assets.some((item) => item.kind === "holding") || !profile.interests.length) throw new Error("profile_incomplete");
-  const active = rawDb.prepare("SELECT id, profile_snapshot FROM briefs WHERE status IN ('queued','researching','scripting','synthesizing') ORDER BY created_at DESC LIMIT 1").get() as { id: string; profile_snapshot: string } | undefined;
-  if (active) {
-    startGeneration(active.id, JSON.parse(active.profile_snapshot) as ProfileSnapshot);
-    return active.id;
+  if (!profile.assets.some((item) => item.kind === "holding") || !profile.interests.length) {
+    throw new Error("profile_incomplete");
   }
+
+  const active = await supabase.from("briefs").select("id,profile_snapshot")
+    .in("status", ["queued", "researching", "scripting", "synthesizing"])
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  assertSupabase(active.error, "find active brief");
+  if (active.data) {
+    startGeneration(active.data.id, active.data.profile_snapshot as ProfileSnapshot);
+    return active.data.id;
+  }
+
   const id = crypto.randomUUID();
-  rawDb.prepare("INSERT INTO briefs (id,status,progress,stage_label,profile_snapshot,target_minutes,created_at) VALUES (?, 'queued', 4, ?, ?, ?, ?)").run(id, "הבריף נכנס לתור", JSON.stringify({ version: 1, ...profile }), profile.targetMinutes, new Date().toISOString());
+  const { error } = await supabase.from("briefs").insert({
+    id, status: "queued", progress: 4, stage_label: "הבריף נכנס לתור",
+    profile_snapshot: { version: 1, ...profile }, target_minutes: profile.targetMinutes,
+    created_at: new Date().toISOString(),
+  });
+  assertSupabase(error, "create brief");
   startGeneration(id, profile);
   return id;
 }
@@ -75,8 +106,9 @@ function canonicalReason(chapter: z.infer<typeof scriptSchema>["chapters"][numbe
   if (chapter.reasonKind === "general") return { ...chapter, reasonLabel: "שוק וכלכלה" };
   const label = chapter.reasonLabel.trim().toLowerCase();
   if (chapter.reasonKind === "portfolio" || chapter.reasonKind === "watchlist") {
-    const match = profile.assets.find((item) => item.kind === (chapter.reasonKind === "portfolio" ? "holding" : "watchlist") &&
-      [item.name, item.symbol].some((value) => label === value.toLowerCase() || label.includes(value.toLowerCase())));
+    const expectedKind = chapter.reasonKind === "portfolio" ? "holding" : "watchlist";
+    const match = profile.assets.find((item) => item.kind === expectedKind
+      && [item.name, item.symbol].some((value) => label === value.toLowerCase() || label.includes(value.toLowerCase())));
     if (match) return { ...chapter, reasonLabel: match.symbol };
   }
   if (chapter.reasonKind === "interest") {
@@ -86,20 +118,34 @@ function canonicalReason(chapter: z.infer<typeof scriptSchema>["chapters"][numbe
   return { ...chapter, reasonKind: "general" as const, reasonLabel: "שוק וכלכלה" };
 }
 
+async function clearStoredAudio(briefId: string) {
+  const storage = getSupabaseAdmin().storage.from(AUDIO_BUCKET);
+  const { data, error } = await storage.list(briefId, { limit: 1000 });
+  assertSupabase(error, "list old brief audio");
+  if (data?.length) {
+    const removal = await storage.remove(data.map(({ name }) => `${briefId}/${name}`));
+    assertSupabase(removal.error, "remove old brief audio");
+  }
+}
+
+async function uploadAudio(path: string, bytes: Buffer) {
+  const { error } = await getSupabaseAdmin().storage.from(AUDIO_BUCKET).upload(path, bytes, {
+    contentType: "audio/mpeg", upsert: true,
+  });
+  assertSupabase(error, "upload audio");
+}
+
 async function generate(id: string, profile: ProfileSnapshot) {
-  const dir = path.join(audioRoot, id);
+  const supabase = getSupabaseAdmin();
   try {
     if (!process.env.OPENAI_API_KEY) throw new Error("missing_api_key");
-    await fs.rm(dir, { recursive: true, force: true });
-    await fs.mkdir(dir, { recursive: true });
-    rawDb.transaction(() => {
-      rawDb.prepare("DELETE FROM sources WHERE brief_id = ?").run(id);
-      rawDb.prepare("DELETE FROM chapters WHERE brief_id = ?").run(id);
-      rawDb.prepare("UPDATE briefs SET title=NULL, research_dossier=NULL, duration_ms=NULL, error_code=NULL, error_message=NULL, completed_at=NULL WHERE id=?").run(id);
-    })();
+    await clearStoredAudio(id);
+    const reset = await supabase.rpc("reset_brief_generation", { p_id: id });
+    assertSupabase(reset.error, "reset brief generation");
+
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 90_000, maxRetries: 2 });
     const textModel = process.env.OPENAI_TEXT_MODEL ?? "gpt-5.6-terra";
-    update(id, "researching", 20, "עוברים על החדשות הרלוונטיות");
+    await update(id, "researching", 20, "עוברים על החדשות הרלוונטיות");
     const research = await client.responses.create({
       model: textModel, store: false, max_output_tokens: 5000,
       tools: [{ type: "web_search" }], tool_choice: "required",
@@ -108,9 +154,10 @@ async function generate(id: string, profile: ProfileSnapshot) {
     });
     if (research.status !== "completed" || !research.output_text) throw new Error("research_failed");
     const citationMap = collectCitations(research.output);
-    rawDb.prepare("UPDATE briefs SET research_dossier = ? WHERE id = ?").run(research.output_text, id);
+    const dossier = await supabase.from("briefs").update({ research_dossier: research.output_text }).eq("id", id);
+    assertSupabase(dossier.error, "save research dossier");
 
-    update(id, "scripting", 48, "בונים את הסיפור האישי שלך");
+    await update(id, "scripting", 48, "בונים את הסיפור האישי שלך");
     const scripted = await client.responses.parse({
       model: textModel, store: false, max_output_tokens: 7000,
       input: `Create a ${profile.targetMinutes}-minute Hebrew podcast from the dossier below. Use only dossier facts and only the exact profile entities. Start with a short AI-voice and educational-information disclosure. No investment advice, predictions, price targets, or unsupported numbers. Keep each chapter below 2,800 characters. For every non-general chapter, reasonLabel must be exactly one profile symbol, asset name, or interest label.\nPROFILE:${JSON.stringify(profile)}\nDOSSIER:${research.output_text}`,
@@ -121,12 +168,17 @@ async function generate(id: string, profile: ProfileSnapshot) {
     const chapters = script.chapters.map((chapter) => canonicalReason(chapter, profile));
     const prohibited = /(^|[.!?]\s*)(קנה|מכור|כדאי לקנות|כדאי למכור|buy|sell)(\s|[.!?])/i;
     if (chapters.some((chapter) => prohibited.test(chapter.script))) throw new Error("unsafe_advice");
-    rawDb.prepare("UPDATE briefs SET title = ? WHERE id = ?").run(script.title, id);
-    const insertChapter = rawDb.prepare("INSERT INTO chapters (id,brief_id,position,title,script,reason_kind,reason_label,start_ms) VALUES (?,?,?,?,?,?,?,?)");
-    chapters.forEach((chapter, position) => insertChapter.run(crypto.randomUUID(), id, position, chapter.title, chapter.script, chapter.reasonKind, chapter.reasonLabel, 0));
-    const chapterRows = rawDb.prepare("SELECT id, position, script FROM chapters WHERE brief_id = ? ORDER BY position").all(id) as Array<{ id: string; position: number; script: string }>;
+    const title = await supabase.from("briefs").update({ title: script.title }).eq("id", id);
+    assertSupabase(title.error, "save brief title");
 
-    update(id, "synthesizing", 66, "מסנתזים קול בעברית");
+    const chapterInsert = await supabase.from("chapters").insert(chapters.map((chapter, position) => ({
+      id: crypto.randomUUID(), brief_id: id, position, title: chapter.title, script: chapter.script,
+      reason_kind: chapter.reasonKind, reason_label: chapter.reasonLabel, start_ms: 0,
+    }))).select("id,position,script").order("position");
+    assertSupabase(chapterInsert.error, "save chapters");
+    const chapterRows = chapterInsert.data ?? [];
+
+    await update(id, "synthesizing", 66, "מסנתזים קול בעברית");
     let total = 0;
     const audioParts: Buffer[] = [];
     for (const chapter of chapterRows) {
@@ -139,39 +191,75 @@ async function generate(id: string, profile: ProfileSnapshot) {
       });
       const bytes = Buffer.from(await speech.arrayBuffer());
       audioParts.push(bytes);
-      const filename = `${chapter.position}-${chapter.id}.mp3`;
-      const temp = path.join(dir, `${filename}.tmp`);
-      await fs.writeFile(temp, bytes); await fs.rename(temp, path.join(dir, filename));
+      const objectPath = `${id}/${chapter.position}-${chapter.id}.mp3`;
+      await uploadAudio(objectPath, bytes);
       const metadata = await parseBuffer(bytes, { mimeType: "audio/mpeg", size: bytes.length });
       const duration = Math.max(1000, Math.round((metadata.format.duration ?? chapter.script.split(/\s+/).length / 145 * 60) * 1000));
-      rawDb.prepare("UPDATE chapters SET audio_file = ?, duration_ms = ?, start_ms = ? WHERE id = ?").run(filename, duration, total, chapter.id);
+      const saved = await supabase.from("chapters").update({ audio_file: objectPath, duration_ms: duration, start_ms: total }).eq("id", chapter.id);
+      assertSupabase(saved.error, "save chapter audio metadata");
       total += duration;
-      update(id, "synthesizing", 66 + Math.round(((chapter.position + 1) / chapterRows.length) * 28), "מקליטים את פרקי הבריף");
+      await update(id, "synthesizing", 66 + Math.round(((chapter.position + 1) / chapterRows.length) * 28), "מקליטים את פרקי הבריף");
     }
-    await fs.writeFile(path.join(dir, "podcast.mp3"), Buffer.concat(audioParts));
-    const insertSource = rawDb.prepare("INSERT INTO sources (id,brief_id,title,publisher,url,accessed_at) VALUES (?,?,?,?,?,?)");
-    for (const [url, title] of citationMap) insertSource.run(crypto.randomUUID(), id, title, new URL(url).hostname.replace(/^www\./, ""), url, new Date().toISOString());
-    rawDb.prepare("UPDATE briefs SET status='completed', progress=100, stage_label=?, duration_ms=?, completed_at=? WHERE id=?").run("הבריף מוכן", total, new Date().toISOString(), id);
+    await uploadAudio(`${id}/podcast.mp3`, Buffer.concat(audioParts));
+
+    if (citationMap.size) {
+      const sources = await supabase.from("sources").insert(Array.from(citationMap, ([url, sourceTitle]) => ({
+        id: crypto.randomUUID(), brief_id: id, title: sourceTitle,
+        publisher: new URL(url).hostname.replace(/^www\./, ""), url, accessed_at: new Date().toISOString(),
+      })));
+      assertSupabase(sources.error, "save sources");
+    }
+    const completed = await supabase.from("briefs").update({
+      status: "completed", progress: 100, stage_label: "הבריף מוכן",
+      duration_ms: total, completed_at: new Date().toISOString(),
+    }).eq("id", id);
+    assertSupabase(completed.error, "complete brief");
   } catch (error) {
     const code = error instanceof Error ? error.message : "generation_failed";
-    const message = code === "missing_api_key" ? "חסר מפתח OpenAI. הוסיפו OPENAI_API_KEY לקובץ .env.local והפעילו מחדש." : "יצירת הבריף נכשלה. אפשר לנסות שוב בעוד רגע.";
-    rawDb.prepare("UPDATE briefs SET status='failed', stage_label=?, error_code=?, error_message=?, completed_at=? WHERE id=?").run("לא הצלחנו להכין את הבריף", code.slice(0, 80), message, new Date().toISOString(), id);
+    const message = code === "missing_api_key"
+      ? "חסר מפתח OpenAI. הוסיפו OPENAI_API_KEY לקובץ .env.local והפעילו מחדש."
+      : "יצירת הבריף נכשלה. אפשר לנסות שוב בעוד רגע.";
+    await supabase.from("briefs").update({
+      status: "failed", stage_label: "לא הצלחנו להכין את הבריף", error_code: code.slice(0, 80),
+      error_message: message, completed_at: new Date().toISOString(),
+    }).eq("id", id);
   }
 }
 
-export function getBrief(id: string): BriefView | null {
-  const brief = rawDb.prepare("SELECT * FROM briefs WHERE id = ?").get(id) as Record<string, unknown> | undefined;
-  if (!brief) return null;
-  if (["queued", "researching", "scripting", "synthesizing"].includes(String(brief.status)) && !activeJobs.has(id)) {
-    try { startGeneration(id, JSON.parse(String(brief.profile_snapshot)) as ProfileSnapshot); } catch { /* The saved error state will be returned on the next poll. */ }
+export async function getBrief(id: string): Promise<BriefView | null> {
+  const supabase = getSupabaseAdmin();
+  const [brief, chapters, sources] = await Promise.all([
+    supabase.from("briefs").select("*").eq("id", id).maybeSingle(),
+    supabase.from("chapters").select("*").eq("brief_id", id).order("position"),
+    supabase.from("sources").select("*").eq("brief_id", id).order("title"),
+  ]);
+  assertSupabase(brief.error, "load brief");
+  assertSupabase(chapters.error, "load brief chapters");
+  assertSupabase(sources.error, "load brief sources");
+  if (!brief.data) return null;
+  const row = brief.data;
+  if (["queued", "researching", "scripting", "synthesizing"].includes(String(row.status)) && !activeJobs.has(id)) {
+    try { startGeneration(id, row.profile_snapshot as ProfileSnapshot); } catch { /* A later poll returns the saved error state. */ }
   }
-  const rows = rawDb.prepare("SELECT * FROM chapters WHERE brief_id = ? ORDER BY position").all(id) as Array<Record<string, unknown>>;
-  const sourceRows = rawDb.prepare("SELECT * FROM sources WHERE brief_id = ? ORDER BY title").all(id) as Array<Record<string, unknown>>;
   return {
-    id, audioUrl: brief.status === "completed" ? `/api/briefs/${id}/audio/full` : null, status: brief.status as BriefView["status"], progress: Number(brief.progress), stageLabel: String(brief.stage_label),
-    title: brief.title as string | null, targetMinutes: Number(brief.target_minutes), durationMs: brief.duration_ms as number | null,
-    errorMessage: brief.error_message as string | null, createdAt: String(brief.created_at), completedAt: brief.completed_at as string | null,
-    chapters: rows.map((r) => ({ id: String(r.id), position: Number(r.position), title: String(r.title), script: String(r.script), reasonKind: String(r.reason_kind), reasonLabel: String(r.reason_label), durationMs: r.duration_ms as number | null, startMs: Number(r.start_ms), audioUrl: r.audio_file ? `/api/briefs/${id}/audio/${r.id}` : null })),
-    sources: sourceRows.map((r) => ({ id: String(r.id), chapterId: r.chapter_id as string | null, title: String(r.title), publisher: r.publisher as string | null, url: String(r.url) })),
+    id,
+    audioUrl: row.status === "completed" ? `/api/briefs/${id}/audio/full` : null,
+    status: row.status as BriefView["status"],
+    progress: Number(row.progress),
+    stageLabel: String(row.stage_label),
+    title: row.title,
+    targetMinutes: Number(row.target_minutes),
+    durationMs: row.duration_ms,
+    errorMessage: row.error_message,
+    createdAt: String(row.created_at),
+    completedAt: row.completed_at,
+    chapters: (chapters.data ?? []).map((chapter) => ({
+      id: chapter.id, position: Number(chapter.position), title: chapter.title, script: chapter.script,
+      reasonKind: chapter.reason_kind, reasonLabel: chapter.reason_label, durationMs: chapter.duration_ms,
+      startMs: Number(chapter.start_ms), audioUrl: chapter.audio_file ? `/api/briefs/${id}/audio/${chapter.id}` : null,
+    })),
+    sources: (sources.data ?? []).map((source) => ({
+      id: source.id, chapterId: source.chapter_id, title: source.title, publisher: source.publisher, url: source.url,
+    })),
   };
 }

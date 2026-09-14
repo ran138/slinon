@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { rawDb } from "@/db";
+import { assertSupabase, getSupabaseAdmin } from "@/db";
 import { assetInputSchema } from "@/lib/domain";
 
 export const runtime = "nodejs";
@@ -16,26 +16,26 @@ function sameOrigin(request: Request) {
 }
 
 export async function GET() {
-  const row = rawDb.prepare("SELECT portfolio_text, assets_json FROM onboarding_draft WHERE id = 1").get() as { portfolio_text: string; assets_json: string } | undefined;
-  if (!row) return NextResponse.json({ text: "", assets: [] });
-  try {
-    return NextResponse.json({ text: row.portfolio_text, assets: JSON.parse(row.assets_json) });
-  } catch {
-    return NextResponse.json({ text: "", assets: [] });
-  }
+  const { data, error } = await getSupabaseAdmin()
+    .from("onboarding_draft").select("portfolio_text,assets_json").eq("id", 1).maybeSingle();
+  assertSupabase(error, "load onboarding draft");
+  return NextResponse.json(data ? { text: data.portfolio_text, assets: data.assets_json } : { text: "", assets: [] });
 }
 
 export async function PUT(request: Request) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "origin_not_allowed" }, { status: 403 });
   const parsed = draftSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "invalid_draft" }, { status: 400 });
-  rawDb.prepare("INSERT INTO onboarding_draft (id, portfolio_text, assets_json, updated_at) VALUES (1, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET portfolio_text = excluded.portfolio_text, assets_json = excluded.assets_json, updated_at = excluded.updated_at")
-    .run(parsed.data.text, JSON.stringify(parsed.data.assets), new Date().toISOString());
+  const { error } = await getSupabaseAdmin().from("onboarding_draft").upsert({
+    id: 1, portfolio_text: parsed.data.text, assets_json: parsed.data.assets, updated_at: new Date().toISOString(),
+  });
+  assertSupabase(error, "save onboarding draft");
   return NextResponse.json(parsed.data);
 }
 
 export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "origin_not_allowed" }, { status: 403 });
-  rawDb.prepare("DELETE FROM onboarding_draft WHERE id = 1").run();
+  const { error } = await getSupabaseAdmin().from("onboarding_draft").delete().eq("id", 1);
+  assertSupabase(error, "delete onboarding draft");
   return new NextResponse(null, { status: 204 });
 }

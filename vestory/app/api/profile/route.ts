@@ -1,18 +1,37 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { db, rawDb } from "@/db";
-import { assets, interests, settings } from "@/db/schema";
+import { assertSupabase, getSupabaseAdmin } from "@/db";
 import { profileUpdateSchema } from "@/lib/domain";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const [current] = await db.select().from(settings).where(eq(settings.id, 1));
+  const supabase = getSupabaseAdmin();
+  const [settings, assets, interests] = await Promise.all([
+    supabase.from("settings").select("target_minutes,onboarding_complete").eq("id", 1).maybeSingle(),
+    supabase.from("assets").select("id,kind,name,symbol,asset_class,exchange,quantity,average_cost,currency,created_at,updated_at").order("created_at"),
+    supabase.from("interests").select("id,label,custom,created_at").order("created_at"),
+  ]);
+  assertSupabase(settings.error, "load settings");
+  assertSupabase(assets.error, "load assets");
+  assertSupabase(interests.error, "load interests");
+
   return NextResponse.json({
-    targetMinutes: current?.targetMinutes ?? 7,
-    onboardingComplete: current?.onboardingComplete ?? false,
-    assets: await db.select().from(assets),
-    interests: await db.select().from(interests),
+    targetMinutes: settings.data?.target_minutes ?? 7,
+    onboardingComplete: settings.data?.onboarding_complete ?? false,
+    assets: (assets.data ?? []).map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      name: item.name,
+      symbol: item.symbol,
+      assetClass: item.asset_class,
+      exchange: item.exchange,
+      quantity: item.quantity,
+      averageCost: item.average_cost,
+      currency: item.currency,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+    })),
+    interests: interests.data ?? [],
   });
 }
 
@@ -23,17 +42,20 @@ export async function PUT(request: Request) {
   }
   const parsed = profileUpdateSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "invalid_profile" }, { status: 400 });
+
   const value = parsed.data;
-  const now = new Date().toISOString();
-  const replace = rawDb.transaction(() => {
-    rawDb.prepare("DELETE FROM assets").run();
-    rawDb.prepare("DELETE FROM interests").run();
-    const assetStatement = rawDb.prepare("INSERT INTO assets (id, kind, name, symbol, asset_class, exchange, quantity, average_cost, currency, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    for (const item of value.assets) assetStatement.run(item.id ?? crypto.randomUUID(), item.kind, item.name, item.symbol, item.assetClass ?? null, item.exchange ?? null, item.quantity ?? null, item.averageCost ?? null, item.currency ?? null, now, now);
-    const interestStatement = rawDb.prepare("INSERT INTO interests (id, label, custom, created_at) VALUES (?, ?, ?, ?)");
-    for (const item of value.interests) interestStatement.run(crypto.randomUUID(), item.label, item.custom ? 1 : 0, now);
-    rawDb.prepare("UPDATE settings SET target_minutes = ?, onboarding_complete = ?, updated_at = ? WHERE id = 1").run(value.targetMinutes, value.onboardingComplete ? 1 : 0, now);
+  const { error } = await getSupabaseAdmin().rpc("replace_profile", {
+    p_assets: value.assets.map((item) => ({
+      id: item.id ?? crypto.randomUUID(), kind: item.kind, name: item.name, symbol: item.symbol,
+      asset_class: item.assetClass ?? null, exchange: item.exchange ?? null,
+      quantity: item.quantity ?? null, average_cost: item.averageCost ?? null, currency: item.currency ?? null,
+    })),
+    p_interests: value.interests.map((item) => ({
+      id: crypto.randomUUID(), label: item.label, custom: item.custom ?? false,
+    })),
+    p_target_minutes: value.targetMinutes,
+    p_onboarding_complete: value.onboardingComplete,
   });
-  replace();
+  assertSupabase(error, "replace profile");
   return GET();
 }
