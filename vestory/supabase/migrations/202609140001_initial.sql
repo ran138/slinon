@@ -110,27 +110,27 @@ set search_path = ''
 as $$
 declare
   item jsonb;
-  current_time timestamptz := now();
+  v_now timestamptz := now();
 begin
-  delete from public.assets;
-  delete from public.interests;
+  delete from public.assets where id is not null;
+  delete from public.interests where id is not null;
 
   for item in select value from jsonb_array_elements(coalesce(p_assets, '[]'::jsonb)) loop
     insert into public.assets (
       id, kind, name, symbol, asset_class, exchange, quantity, average_cost, currency, created_at, updated_at
     ) values (
       (item->>'id')::uuid, item->>'kind', item->>'name', item->>'symbol', item->>'asset_class',
-      item->>'exchange', item->>'quantity', item->>'average_cost', item->>'currency', current_time, current_time
+      item->>'exchange', item->>'quantity', item->>'average_cost', item->>'currency', v_now, v_now
     );
   end loop;
 
   for item in select value from jsonb_array_elements(coalesce(p_interests, '[]'::jsonb)) loop
     insert into public.interests (id, label, custom, created_at)
-    values ((item->>'id')::uuid, item->>'label', coalesce((item->>'custom')::boolean, false), current_time);
+    values ((item->>'id')::uuid, item->>'label', coalesce((item->>'custom')::boolean, false), v_now);
   end loop;
 
   insert into public.settings (id, target_minutes, onboarding_complete, updated_at)
-  values (1, p_target_minutes, p_onboarding_complete, current_time)
+  values (1, p_target_minutes, p_onboarding_complete, v_now)
   on conflict (id) do update set
     target_minutes = excluded.target_minutes,
     onboarding_complete = excluded.onboarding_complete,

@@ -18,6 +18,7 @@ The default models are configurable in `.env.local`:
 OPENAI_TEXT_MODEL=gpt-5.6-terra
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=coral
+OPENAI_EMBEDDING_MODEL=text-embedding-3-large
 ```
 
 If a default model is unavailable to your OpenAI project, replace it with a compatible model available to that project.
@@ -47,5 +48,11 @@ On Vercel, the application automatically uses `/tmp/vestory` so server routes ca
 - `npm start` — run the production build locally
 - `npm run typecheck` — validate TypeScript
 - `npm run lint` — run ESLint
+- `npm run db:schema` — apply the Supabase schema, including pgvector knowledge storage
+- `npm run knowledge:refresh` — import the screenshot portfolio and refresh Calcalist, Ynet and SEC EDGAR knowledge
+
+## Portfolio knowledge
+
+The knowledge refresh uses three bounded sources: Calcalist, Ynet and SEC EDGAR. It stores short factual notes, source URLs, matching portfolio symbols and 1,536-dimension `text-embedding-3-large` vectors in Supabase. Full article text is not copied. Brief generation refreshes these sources and retrieves the most relevant records with vector search before scripting.
 
 The architecture and security boundaries are documented in `docs/architecture-vestory.md`.
