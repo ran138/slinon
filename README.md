@@ -1,179 +1,218 @@
 # Slinon
 
-⁧סלינון הוא פרויקט לעדכון פיננסי אישי בעברית. המוצר מאפשר למשתמש לבחור נכסים ונושאים שמעניינים אותו, לאסוף מידע עדכני ממקורות, ולהפוך אותו לתקציר קצר שאפשר לקרוא או לשמוע כפודקאסט אישי.⁩
+Slinon is building **Vestory**, a personalized Hebrew financial-news experience that turns a user's portfolio, watchlist, and interests into a short, sourced audio brief.
 
-⁧המאגר כולל אתר שיווק, עמוד מוצר נוסף, אב־טיפוס עצמאי של ממשק המשתמש ויישום מקומי מלא בשם ⁦Vestory⁩.⁩
+Vestory researches recent market reporting, selects the stories that matter to the user's profile, writes a structured Hebrew briefing, and synthesizes it into a chapter-based podcast. The product is designed to explain what happened and why it is relevant—not to provide investment advice.
 
-## ⁧רכיבי הפרויקט⁩
+## Live product
 
-⁧א. ⁦marketing_page⁩ — אתר השיווק הראשי של ⁦Vestory⁩ מבית סלינון. זהו אתר סטטי ללא תהליך בנייה, הכולל דף ראשי, הדגמה, דוגמאות, הסבר על המוצר, עמודי השוואה ועמוד אמון ומקורות.⁩
+- [Slinon](https://www.slinon.me) — product landing page
+- [Vestory app](https://www.slinon.me/vestory_app) — functional application
+- [Marketing site](https://www.slinon.me/marketing) — extended product information and comparisons
 
-⁧ב. ⁦on_slinon_page⁩ — עמוד מוצר סטטי נוסף המציג את רעיון הפודקאסט האישי ואת תהליך ההצטרפות.⁩
+## What Vestory does
 
-⁧ג. ⁦ui_web_app⁩ — אב־טיפוס עצמאי של ממשק ⁦Vestory⁩, ארוז בתוך קובץ ⁦HTML⁩ יחיד. הוא מיועד להדגמה ואינו מחובר לשרת הפעיל.⁩
+- Accepts a free-text portfolio and asks the user to confirm the detected assets.
+- Tracks holdings, watchlist assets, and broader topics of interest.
+- Researches current reporting with OpenAI web search.
+- Produces a sourced Hebrew brief tailored to the saved profile.
+- Generates Hebrew speech for every chapter and a combined podcast.
+- Explains why each story was selected and links back to its sources.
+- Keeps an archive of completed briefs.
 
-⁧ד. ⁦vestory⁩ — יישום המוצר המלא. זהו יישום ⁦Next.js⁩ מקומי בעברית, הכולל ממשק משתמש, נתיבי שרת, מסד נתונים מקומי, מחקר בעזרת ⁦OpenAI⁩ ויצירת קובצי שמע.⁩
+## Architecture
 
-## ⁧מבנה המאגר⁩
+```text
+Browser
+  |
+  v
+Next.js application on Vercel
+  |-- App Router UI (Hebrew, RTL)
+  |-- Route Handlers under /api
+  |
+  |---> Supabase Postgres
+  |       Profile, assets, interests, briefs, chapters, and sources
+  |
+  |---> Supabase Storage
+  |       Generated MP3 files in the private vestory-audio bucket
+  |
+  `---> OpenAI APIs
+          Web research, structured brief generation, and speech synthesis
+```
+
+The deployed application is a Next.js 16 modular monolith using React 19, TypeScript, Tailwind CSS, Supabase, and the OpenAI API. Vercel deploys the `vestory` directory from the `main` branch.
+
+### Data model
+
+- `settings` — language, target duration, and onboarding state
+- `onboarding_draft` — temporary portfolio input and detected assets
+- `assets` — portfolio holdings and watchlist items
+- `interests` — predefined and custom topics
+- `briefs` — generation state, profile snapshots, research, and completion metadata
+- `chapters` — ordered scripts, personalization reasons, and audio references
+- `sources` — citations associated with generated briefs
+
+The canonical schema is defined in [`vestory/supabase/migrations/202609140001_initial.sql`](vestory/supabase/migrations/202609140001_initial.sql).
+
+## Repository structure
 
 ```text
 slinon/
-├── .github/workflows/pages.yml   # GitHub Pages deployment
-├── vestory/                      # Full-stack local application
-├── marketing_page/               # Main static marketing website
-├── on_slinon_page/               # Alternative static product page
-├── ui_web_app/
-│   └── vestory.html              # Standalone UI prototype
+├── vestory/                 # Deployed full-stack Next.js application
+│   ├── app/                 # Pages and API route handlers
+│   ├── components/          # Product UI and shared components
+│   ├── db/                  # Server-only Supabase client
+│   ├── lib/                 # Domain validation and brief generation
+│   ├── public/              # Static Slinon and marketing pages used in production
+│   ├── scripts/             # Schema setup and legacy-data migration tools
+│   └── supabase/migrations/ # Postgres schema
+├── marketing_page/          # Source for the static marketing experience
+├── on_slinon_page/          # Source for the Slinon product landing page
+├── ui_vestory_web_app/      # Standalone Vite UI prototype
+├── product/podcast/         # Experimental standalone podcast pipeline
 └── README.md
 ```
 
-## ⁧היישום המקומי⁩
+`vestory` is the production application. The other directories preserve marketing sources, earlier interface work, and experimental modules; they are not separate production services.
 
-⁧⁦Vestory⁩ הוא יישום מודולרי יחיד המבוסס על ⁦Next.js 16⁩, ⁦React⁩, ⁦TypeScript⁩ ו־⁦SQLite⁩. הוא מאזין כברירת מחדל רק למחשב המקומי בכתובת הבאה:⁩
+## Getting started
 
-```text
-http://127.0.0.1:5173
-```
+### Requirements
 
-⁧היישום שומר פרופיל, נכסים, רשימת מעקב, תחומי עניין, תקצירים, פרקים ומקורות. הוא משתמש ב־⁦OpenAI Responses API⁩ לצורך מחקר ויצירת תסריט בעברית, וב־⁦Speech API⁩ לצורך הפקת שמע.⁩
+- Node.js 22.13 or newer
+- npm
+- A Supabase project
+- An OpenAI API key with access to the configured text and speech models
 
-⁧נתיבי השרת המרכזיים הם:⁩
-
-```text
-GET  /api/profile
-PUT  /api/profile
-GET  /api/onboarding/draft
-PUT  /api/onboarding/draft
-DELETE /api/onboarding/draft
-POST /api/portfolio/parse
-GET  /api/briefs
-POST /api/briefs
-GET  /api/briefs/:id
-GET  /api/briefs/:id/audio/:chapter
-```
-
-## ⁧דרישות מערכת⁩
-
-⁧א. ⁦Node.js 22.13⁩ או גרסה חדשה יותר.⁩
-
-⁧ב. מפתח ⁦OpenAI API⁩ עם גישה למודלי הטקסט והדיבור המוגדרים בפרויקט.⁩
-
-## ⁧התקנה והפעלה⁩
-
-⁧עברו לתיקיית היישום:⁩
+### Install
 
 ```bash
-cd vestory
-```
-
-⁧צרו קובץ הגדרות מקומי אם הוא עדיין אינו קיים:⁩
-
-```bash
+git clone https://github.com/ran138/slinon.git
+cd slinon/vestory
+npm ci
 cp .env.example .env.local
 ```
 
-⁧הוסיפו לקובץ את מפתח השירות ואת הגדרות המודלים:⁩
+Add the required credentials to `vestory/.env.local`:
 
 ```dotenv
 OPENAI_API_KEY=
 OPENAI_TEXT_MODEL=gpt-5.6-terra
 OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=coral
+
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=your-server-only-secret-key
+POSTGRES_URL_NON_POOLING=postgresql://postgres:password@host:5432/postgres
 ```
 
-⁧התקינו את התלויות והפעילו את סביבת הפיתוח:⁩
+`SUPABASE_SECRET_KEY` and `POSTGRES_URL_NON_POOLING` are server-only credentials. Never expose them through a `NEXT_PUBLIC_` variable or commit them to Git.
+
+### Initialize the database
+
+Apply the checked-in schema to the configured Supabase project:
 
 ```bash
-npm ci
+npm run db:schema
+```
+
+The migration creates the application tables, enables Row Level Security, grants access to the server-side service role, creates the required database functions, and prepares the private `vestory-audio` storage bucket.
+
+### Run locally
+
+```bash
 npm run dev
 ```
 
-⁧לאחר ההפעלה פתחו בדפדפן:⁩
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The functional product is available at [http://127.0.0.1:5173/vestory_app](http://127.0.0.1:5173/vestory_app).
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the local development server on port 5173 |
+| `npm run build` | Create a production build |
+| `npm start` | Run the production build locally |
+| `npm run typecheck` | Validate the TypeScript project |
+| `npm run lint` | Run ESLint |
+| `npm run db:schema` | Apply the Supabase schema |
+| `npm run db:migrate` | Import an existing local SQLite dataset and audio files into Supabase |
+
+The SQLite migration is only needed when importing data from an older local installation. It reads `data/vestory.sqlite` and `data/audio/` by default; set `VESTORY_DATA_DIR` to read from a different directory.
+
+## Application routes
+
+### Pages
+
+- `/` — Slinon product landing page
+- `/marketing` — marketing site
+- `/vestory_app` — Vestory application
+- `/vestory_app/onboarding/*` — portfolio and interest onboarding
+- `/vestory_app/today` — latest personalized brief
+- `/vestory_app/portfolio` — portfolio editor
+- `/vestory_app/preferences` — watchlist and interest settings
+- `/vestory_app/archive` — completed brief archive
+
+### API
 
 ```text
-http://127.0.0.1:5173
+GET    /api/profile
+PUT    /api/profile
+GET    /api/onboarding/draft
+PUT    /api/onboarding/draft
+DELETE /api/onboarding/draft
+POST   /api/portfolio/parse
+GET    /api/briefs
+POST   /api/briefs
+GET    /api/briefs/:id
+GET    /api/briefs/:id/audio/:chapter
 ```
 
-## ⁧פקודות שימושיות⁩
+## Brief generation flow
+
+1. The user confirms a portfolio and selects at least one interest.
+2. The server stores a versioned snapshot of the profile.
+3. OpenAI web search gathers recent, cited reporting relevant to that snapshot.
+4. A structured response turns the research into three to eight Hebrew chapters.
+5. Each chapter is synthesized to MP3 and uploaded to Supabase Storage.
+6. The completed brief, chapter metadata, and sources are saved in Supabase and displayed in the player.
+
+Prompts and validation explicitly reject buy, sell, or hold instructions; price targets; unsupported figures; and invented portfolio information. OpenAI requests use `store: false`.
+
+## Deployment
+
+The repository is connected to the Vercel project `slinon` with the following production configuration:
+
+```text
+Git repository:    ran138/slinon
+Production branch: main
+Root directory:    vestory
+Production domain: https://www.slinon.me
+```
+
+Pushes to `main` create production deployments. Other branches can create preview deployments. Supabase and OpenAI credentials must be configured in Vercel project settings for every required environment.
+
+## Security status
+
+This repository does not contain deployed secrets; `.env*` files are ignored except for the placeholder `.env.example`.
+
+The current prototype uses one shared workspace and does **not** implement user authentication or per-user data isolation. Its API routes use a server-side Supabase secret and are reachable through the public deployment. Do not store sensitive or real financial information in the hosted application until authentication, authorization, and tenant-level Row Level Security policies are implemented.
+
+## Contributing
+
+1. Create a branch from `main`.
+2. Keep secrets in `vestory/.env.local` only.
+3. Run the validation checks before opening a pull request:
 
 ```bash
-npm run dev        # Start the local development server
-npm run build      # Create a production build
-npm start          # Start the production build locally
-npm run typecheck  # Validate TypeScript
-npm run lint       # Run ESLint
-npm run db:generate
+cd vestory
+npm run lint
+npm run typecheck
+npm run build
 ```
 
-## ⁧הרצת האתרים הסטטיים⁩
+4. Open a pull request and review its Vercel preview before merging.
 
-⁧אפשר לפתוח את קובצי ⁦HTML⁩ ישירות, או להפעיל שרת מקומי פשוט מתוך שורש המאגר.⁩
+## Financial disclaimer
 
-⁧אתר השיווק הראשי:⁩
-
-```bash
-python3 -m http.server 8000 --directory marketing_page
-```
-
-```text
-http://127.0.0.1:8000
-```
-
-⁧עמוד המוצר הנוסף:⁩
-
-```bash
-python3 -m http.server 8001 --directory on_slinon_page
-```
-
-```text
-http://127.0.0.1:8001
-```
-
-⁧אב־הטיפוס העצמאי:⁩
-
-```bash
-python3 -m http.server 8002 --directory ui_web_app
-```
-
-```text
-http://127.0.0.1:8002/vestory.html
-```
-
-## ⁧נתונים מקומיים וסודות⁩
-
-⁧המידע המתמשך של ⁦Vestory⁩ נשמר מקומית ואינו אמור להיכנס לבקרת הגרסאות:⁩
-
-```text
-vestory/data/vestory.sqlite
-vestory/data/audio/
-vestory/.env.local
-```
-
-⁧מסד הנתונים שומר את הפרופיל, הארכיון, התסריטים ופרטי המקורות. קובצי השמע נשמרים בתיקיית ⁦audio⁩. מומלץ לגבות את תיקיית ⁦data⁩ כדי לשמור את המידע והתקצירים שנוצרו.⁩
-
-⁧מפתח ⁦OpenAI API⁩ נקרא רק בצד השרת. אין להכניס אותו לקוד, לקובץ ⁦README⁩ או לבקרת הגרסאות.⁩
-
-## ⁧פריסה⁩
-
-⁧כל דחיפה לענף ⁦main⁩ מפעילה את תהליך ⁦GitHub Pages⁩ ומפרסמת את התוכן של ⁦marketing_page⁩. הדומיין המוגדר כרגע הוא:⁩
-
-```text
-slinon.me
-```
-
-⁧הגדרת ⁦Vercel⁩ המקומית מקשרת את הפרויקט לתיקיית ⁦vestory⁩. עם זאת, היישום משתמש כרגע במסד ⁦SQLite⁩ ובקובצי שמע הנשמרים בדיסק המקומי. לפני פריסה בסביבה שבה מערכת הקבצים אינה מתמשכת, צריך להעביר את הנתונים והקבצים לאחסון מתמשך מתאים.⁩
-
-## ⁧מצב ידוע לאחר ארגון התיקיות⁩
-
-⁧בחלק מדפי ⁦marketing_page⁩ עדיין קיימים קישורים לנתיב הישן:⁩
-
-```text
-site/index.html
-site/assets/slinon-logo.png
-```
-
-⁧תיקיית ⁦site⁩ הוחלפה במבנה החדש ואינה קיימת עוד כתיקיית מוצר פעילה. לכן יש לעדכן את הקישורים ואת נתיב הלוגו לפני פרסום גרסת השיווק החדשה.⁩
-
-## ⁧הבהרה פיננסית⁩
-
-⁧הפרויקט מיועד להצגת מידע כללי בלבד. הוא אינו מספק המלצות קנייה, מכירה או החזקה, תחזיות מחיר או ייעוץ השקעות אישי.⁩
+Slinon and Vestory provide general educational information only. They do not provide personalized investment advice, recommendations to buy, sell, or hold an asset, price forecasts, or professional financial services.
