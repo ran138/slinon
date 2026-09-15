@@ -1109,10 +1109,19 @@ function GeneratingScreen({ briefId, onDone, onBack }: { briefId: string; onDone
 
 const WAVEFORM_HEIGHTS = Array.from({ length: 60 }, (_, i) => 20 + Math.sin(i * 0.4) * 14 + Math.abs(Math.sin(i * 1.1 + 0.7)) * 22);
 
+function greetingForIsraelTime(): string {
+  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", hour: "numeric", hour12: false }).format(new Date()));
+  if (hour >= 5 && hour < 12) return "בוקר טוב";
+  if (hour >= 12 && hour < 17) return "צהריים טובים";
+  if (hour >= 17 && hour < 21) return "ערב טוב";
+  return "לילה טוב";
+}
+
 function DashboardScreen({ holdings, brief, onNav, onPlay, onGenerate, generating }: {
   holdings: Holding[]; brief: BriefView | null; onNav: (s: Screen) => void; onPlay: () => void; onGenerate: () => void; generating: boolean;
 }) {
-  const today = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" });
+  const today = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Jerusalem" });
+  const greeting = greetingForIsraelTime();
 
   if (!brief) {
     return (
@@ -1120,7 +1129,7 @@ function DashboardScreen({ holdings, brief, onNav, onPlay, onGenerate, generatin
         <div className="max-w-5xl mx-auto px-6 pt-8">
           <div className="mb-7">
             <p className="text-sm font-medium mb-1" style={{ color: "#9b9dae" }}>{today}</p>
-            <h1 className="text-3xl font-bold" style={{ color: "#f7f7fb" }}>בוקר טוב</h1>
+            <h1 className="text-3xl font-bold" style={{ color: "#f7f7fb" }}>{greeting}</h1>
           </div>
           <div className="rounded-2xl p-10 text-center" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
             <p style={{ color: "#9b9dae", marginBottom: 16 }}>{holdings.length ? "עדיין אין לך פודקאסט מוכן." : "הוסיפו תיק ותחומי עניין כדי ליצור פודקאסט אישי."}</p>
@@ -1140,7 +1149,7 @@ function DashboardScreen({ holdings, brief, onNav, onPlay, onGenerate, generatin
       <div className="max-w-5xl mx-auto px-6 pt-8">
         <div className="mb-7">
           <p className="text-sm font-medium mb-1" style={{ color: "#9b9dae" }}>{today}</p>
-          <h1 className="text-3xl font-bold" style={{ color: "#f7f7fb" }}>בוקר טוב</h1>
+          <h1 className="text-3xl font-bold" style={{ color: "#f7f7fb" }}>{greeting}</h1>
         </div>
 
         <div className="grid gap-6 responsive-aside-grid" style={{ gridTemplateColumns: "1fr 300px" }}>
