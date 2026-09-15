@@ -5,6 +5,7 @@ import type { CSSProperties, DragEvent, MouseEvent as ReactMouseEvent } from "re
 import type { BriefView, ProfileUpdate } from "@/lib/domain";
 import { Notice } from "@/components/notice";
 import { Logo } from "@/components/logo";
+import { initAnalytics, identifyUser, resetAnalytics } from "@/lib/analytics";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -745,8 +746,8 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
                     </div>
                     {(row.quantity || row.value) && !row.editing && (
                       <div style={{ display: "flex", gap: 12, marginTop: 3 }}>
-                        {row.quantity && <span style={{ fontSize: "0.75rem", color: "#686888" }}>כמות: {row.quantity}</span>}
-                        {row.value && <span style={{ fontSize: "0.75rem", color: "#686888" }}>שווי: {row.value}</span>}
+                        {row.quantity && <span className="ph-mask-text" style={{ fontSize: "0.75rem", color: "#686888" }}>כמות: {row.quantity}</span>}
+                        {row.value && <span className="ph-mask-text" style={{ fontSize: "0.75rem", color: "#686888" }}>שווי: {row.value}</span>}
                       </div>
                     )}
                   </div>
@@ -2031,8 +2032,9 @@ function HistoryScreen({ briefs, onOpen, onPlay }: { briefs: BriefView[]; onOpen
 
 // ─── App shell ────────────────────────────────────────────────────────────────
 
-type Profile = ProfileUpdate & { nextRunAt: string | null; lastScheduledAt: string | null };
+type Profile = ProfileUpdate & { email: string | null; nextRunAt: string | null; lastScheduledAt: string | null };
 const EMPTY_PROFILE: Profile = {
+  email: null,
   targetMinutes: 5,
   podcastPlan: "daily",
   scheduleTime: "07:00",
@@ -2075,6 +2077,8 @@ export function VestoryApp() {
       return;
     }
 
+    initAnalytics();
+
     let ignore = false;
     Promise.all([
       fetch("/api/profile").then((r) => r.json() as Promise<Profile>),
@@ -2084,6 +2088,7 @@ export function VestoryApp() {
       setProfile(p);
       setBriefs(b);
       setScreen(p.onboardingComplete ? "dashboard" : "welcome");
+      if (p.email) identifyUser(p.email);
     }).catch(() => { if (!ignore) setLoadError("לא הצלחנו לטעון את הנתונים המקומיים."); })
       .finally(() => { if (!ignore) setLoading(false); });
     return () => { ignore = true; };
@@ -2092,6 +2097,7 @@ export function VestoryApp() {
   function goTo(s: Screen) { setScreen(s); window.scrollTo(0, 0); }
 
   async function handleSignOut() {
+    resetAnalytics();
     await fetch("/api/auth/sign-out", { method: "POST" });
     window.location.href = "/login";
   }

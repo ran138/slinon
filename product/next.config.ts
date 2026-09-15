@@ -58,7 +58,11 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/vestory_app/:path*",
-        headers: [{ key: "Content-Security-Policy", value: `default-src 'self'; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` }],
+        // connect-src includes PostHog's ingest hosts (both regions, since
+        // the project may be created in either) — its session-replay/
+        // analytics SDK sends data directly from the browser, unlike our
+        // server-mediated Supabase auth calls.
+        headers: [{ key: "Content-Security-Policy", value: `default-src 'self'; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` }],
       },
       {
         source: "/login",

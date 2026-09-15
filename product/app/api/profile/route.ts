@@ -21,6 +21,7 @@ export async function GET() {
   assertSupabase(interests.error, "load interests");
 
   return NextResponse.json({
+    email: user.email ?? null,
     targetMinutes: settings.data?.target_minutes ?? 7,
     podcastPlan: settings.data?.podcast_plan ?? "daily",
     scheduleTime: String(settings.data?.schedule_time ?? "07:00").slice(0, 5),
