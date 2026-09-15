@@ -1227,8 +1227,8 @@ function DashboardScreen({ holdings, brief, onNav, onPlay, onGenerate, generatin
                           <span className="font-bold" style={{ fontSize: "0.65rem", color: "#9d94f7" }}>{h.ticker.replace(/[^A-Z]/g, "").slice(0, 2)}</span>
                         </div>
                         <div>
-                          <p className="text-xs font-semibold" style={{ color: "#f7f7fb", direction: "ltr" }}>{h.ticker}</p>
-                          {h.name && <p style={{ fontSize: "0.68rem", color: "#565968" }}>{h.name}</p>}
+                          <p className="text-xs font-semibold" style={{ color: "#f7f7fb", direction: "ltr", textAlign: "right" }}>{h.ticker}</p>
+                          {h.name && <p style={{ fontSize: "0.68rem", color: "#565968", textAlign: "right" }}>{h.name}</p>}
                         </div>
                       </div>
                     </div>
@@ -1587,8 +1587,8 @@ function PortfolioSettingsScreen({ holdings, onSave }: { holdings: Holding[]; on
                     <span className="text-xs font-bold" style={{ color: "#9d94f7" }}>{h.ticker.replace(/[^A-Z]/g, "").slice(0, 2)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold" style={{ color: "#f7f7fb", direction: "ltr" }}>{h.ticker}</p>
-                    {h.name && <p className="text-xs mt-0.5" style={{ color: "#565968" }}>{h.name}</p>}
+                    <p className="text-sm font-semibold" style={{ color: "#f7f7fb", direction: "ltr", textAlign: "right" }}>{h.ticker}</p>
+                    {h.name && <p className="text-xs mt-0.5" style={{ color: "#565968", textAlign: "right" }}>{h.name}</p>}
                   </div>
                   <button onClick={() => removeHolding(h.id)} className="opacity-30 hover:opacity-70 transition-opacity" style={{ color: "#f87171", background: "none", border: "none", cursor: "pointer" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
