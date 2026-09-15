@@ -1271,7 +1271,6 @@ function DashboardScreen({ holdings, brief, onNav, onPlay, onGenerate, generatin
 function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
   brief: BriefView | null; onNav: (s: Screen) => void; autoplay?: boolean; onAutoplayed?: () => void;
 }) {
-  const [activeChapter, setActiveChapter] = useState(0);
   const [playing, setPlaying] = useState(autoplay);
   const [elapsed, setElapsed] = useState(0);
   const [speed, setSpeed] = useState(1);
@@ -1282,16 +1281,17 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
   }, [speed]);
 
   // Single source of truth for actually starting/stopping playback — the
-  // `playing` state (toggled by the play/pause button, chapter navigation,
-  // and this screen's own initial autoplay request) drives the real
-  // <audio> element here, instead of each caller needing to imperatively
-  // call .play()/.pause() on the ref itself.
+  // `playing` state (toggled by the play/pause button and this screen's own
+  // initial autoplay request) drives the real <audio> element here, instead
+  // of each caller needing to imperatively call .play()/.pause() on the ref
+  // itself. One <audio> element plays the whole episode end to end — chapter
+  // navigation below only ever seeks within it, it never swaps the source.
   useEffect(() => {
     const el = audioRef.current;
     if (!el) return;
     if (playing) void el.play().catch(() => setPlaying(false));
     else el.pause();
-  }, [playing, activeChapter]);
+  }, [playing]);
 
   useEffect(() => {
     if (autoplay) onAutoplayed?.();
@@ -1301,21 +1301,35 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
 
   if (!brief) return <div className="min-h-screen flex items-center justify-center" style={{ color: "#9b9dae" }}>הבריף לא נמצא.</div>;
 
-  const chapter = brief.chapters[activeChapter];
   const totalDuration = brief.chapters.reduce((s, c) => s + (c.durationMs ?? 0), 0);
-  const progress = chapter?.durationMs ? (elapsed * 1000) / chapter.durationMs : 0;
+  const elapsedMs = elapsed * 1000;
+  // The active chapter is derived from playback position within the single
+  // continuous track, not stored separately — it's whichever chapter's
+  // [startMs, startMs+durationMs) range contains the current time.
+  const activeChapter = clamp(
+    brief.chapters.reduce((found, c, i) => ((c.startMs ?? 0) <= elapsedMs ? i : found), 0),
+    0,
+    Math.max(0, brief.chapters.length - 1),
+  );
+  const chapter = brief.chapters[activeChapter];
+  const progress = totalDuration ? elapsedMs / totalDuration : 0;
 
-  function selectChapter(i: number, autoplay = false) {
-    setActiveChapter(i);
-    setElapsed(0);
-    setPlaying(autoplay);
+  function seekTo(seconds: number) {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = clamp(seconds, 0, totalDuration / 1000);
+    setElapsed(audioRef.current.currentTime);
+  }
+
+  function seekToChapter(i: number) {
+    const target = brief!.chapters[i];
+    if (target) seekTo((target.startMs ?? 0) / 1000);
   }
 
   function seek(e: ReactMouseEvent<HTMLDivElement>) {
-    if (!audioRef.current || !chapter?.durationMs) return;
+    if (!totalDuration) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
-    audioRef.current.currentTime = ratio * (chapter.durationMs / 1000);
+    seekTo(ratio * (totalDuration / 1000));
   }
 
   return (
@@ -1336,14 +1350,14 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
             <div className="rounded-2xl p-6 mb-5 relative overflow-hidden" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
               <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg, #7b6ff5, #5b8af0)" }} />
 
-              {chapter?.audioUrl && (
+              {brief.audioUrl && (
                 <audio
                   ref={audioRef}
-                  src={chapter.audioUrl}
+                  src={brief.audioUrl}
                   onPlay={() => setPlaying(true)}
                   onPause={() => setPlaying(false)}
                   onTimeUpdate={(e) => setElapsed(e.currentTarget.currentTime)}
-                  onEnded={() => { if (activeChapter < brief.chapters.length - 1) selectChapter(activeChapter + 1, true); else setPlaying(false); }}
+                  onEnded={() => setPlaying(false)}
                 />
               )}
 
@@ -1359,32 +1373,44 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
               </div>
               <h2 className="text-lg font-semibold mb-6" style={{ color: "#f7f7fb" }}>{chapter?.title}</h2>
 
-              <div className="rounded-lg overflow-hidden cursor-pointer" style={{ background: "#181a26", padding: 8, marginBottom: 8 }} onClick={seek}>
+              <div className="rounded-lg overflow-hidden cursor-pointer relative" style={{ background: "#181a26", padding: 8, marginBottom: 8 }} onClick={seek}>
                 <div className="flex items-end gap-px" style={{ height: 56, direction: "ltr" }}>
                   {Array.from({ length: 80 }).map((_, i) => {
                     const played = i / 80 < progress;
                     return <div key={i} className="flex-1 rounded-sm" style={{ height: `${25 + Math.sin(i * 0.35) * 20 + Math.abs(Math.sin(i * 0.8)) * 25}%`, background: played ? "linear-gradient(to top, #7b6ff5, #5b8af0)" : "#292c3d" }} />;
                   })}
                 </div>
+                {totalDuration > 0 && brief.chapters.slice(1).map((c) => (
+                  <div
+                    key={c.id}
+                    title={c.title}
+                    className="absolute rounded-full"
+                    style={{
+                      left: `calc(8px + (100% - 16px) * ${(c.startMs ?? 0) / totalDuration})`,
+                      width: 6, height: 6, top: "50%", transform: "translate(-50%, -50%)",
+                      background: "#f7f7fb", boxShadow: "0 0 0 2px #181a26", pointerEvents: "none",
+                    }}
+                  />
+                ))}
               </div>
 
               <div className="flex items-center justify-between mb-5 text-xs font-mono" style={{ color: "#565968", direction: "ltr" }}>
                 <span>{formatSeconds(elapsed)}</span>
-                <span>{fmtMs(chapter?.durationMs)}</span>
+                <span>{fmtMs(totalDuration)}</span>
               </div>
 
               <div className="flex items-center justify-between">
                 <button onClick={() => setSpeed(speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1)} className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition-colors hover:bg-white/5" style={{ color: "#9b9dae", border: "1px solid #292c3d", background: "none", cursor: "pointer" }}>{speed}×</button>
 
                 <div className="flex items-center gap-4">
-                  <button onClick={() => activeChapter > 0 && selectChapter(activeChapter - 1)} disabled={activeChapter === 0} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors" style={{ color: "#9b9dae", background: "none", border: "none", cursor: activeChapter === 0 ? "not-allowed" : "pointer", opacity: activeChapter === 0 ? 0.35 : 1 }}>
+                  <button onClick={() => activeChapter > 0 && seekToChapter(activeChapter - 1)} disabled={activeChapter === 0} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors" style={{ color: "#9b9dae", background: "none", border: "none", cursor: activeChapter === 0 ? "not-allowed" : "pointer", opacity: activeChapter === 0 ? 0.35 : 1 }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20" /><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" strokeWidth="2" fill="none" /></svg>
                   </button>
                   <button
                     onClick={() => setPlaying((p) => !p)}
-                    disabled={!chapter?.audioUrl}
+                    disabled={!brief.audioUrl}
                     className="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-                    style={{ background: "linear-gradient(135deg, #7b6ff5, #5b8af0)", border: "none", cursor: chapter?.audioUrl ? "pointer" : "not-allowed", opacity: chapter?.audioUrl ? 1 : 0.4 }}
+                    style={{ background: "linear-gradient(135deg, #7b6ff5, #5b8af0)", border: "none", cursor: brief.audioUrl ? "pointer" : "not-allowed", opacity: brief.audioUrl ? 1 : 0.4 }}
                   >
                     {playing ? (
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
@@ -1392,7 +1418,7 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3" /></svg>
                     )}
                   </button>
-                  <button onClick={() => activeChapter < brief.chapters.length - 1 && selectChapter(activeChapter + 1)} disabled={activeChapter === brief.chapters.length - 1} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors" style={{ color: "#9b9dae", background: "none", border: "none", cursor: activeChapter === brief.chapters.length - 1 ? "not-allowed" : "pointer", opacity: activeChapter === brief.chapters.length - 1 ? 0.35 : 1 }}>
+                  <button onClick={() => activeChapter < brief.chapters.length - 1 && seekToChapter(activeChapter + 1)} disabled={activeChapter === brief.chapters.length - 1} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors" style={{ color: "#9b9dae", background: "none", border: "none", cursor: activeChapter === brief.chapters.length - 1 ? "not-allowed" : "pointer", opacity: activeChapter === brief.chapters.length - 1 ? 0.35 : 1 }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4" /><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth="2" fill="none" /></svg>
                   </button>
                 </div>
@@ -1411,7 +1437,7 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
                 const isActive = i === activeChapter;
                 const isDone = i < activeChapter;
                 return (
-                  <button key={ch.id} onClick={() => selectChapter(i)} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all text-right" style={{ background: isActive ? "rgba(123,111,245,0.15)" : "transparent", border: `1px solid ${isActive ? "rgba(123,111,245,0.2)" : "transparent"}`, cursor: "pointer" }}>
+                  <button key={ch.id} onClick={() => seekToChapter(i)} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all text-right" style={{ background: isActive ? "rgba(123,111,245,0.15)" : "transparent", border: `1px solid ${isActive ? "rgba(123,111,245,0.2)" : "transparent"}`, cursor: "pointer" }}>
                     <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: isDone ? "rgba(52,211,153,0.15)" : isActive ? "rgba(123,111,245,0.15)" : "#181a26" }}>
                       {isDone ? (
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
@@ -1962,7 +1988,7 @@ function weekBucket(d: Date) {
   return d.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
 }
 
-function HistoryScreen({ briefs, onOpen }: { briefs: BriefView[]; onOpen: (id: string) => void }) {
+function HistoryScreen({ briefs, onOpen, onPlay }: { briefs: BriefView[]; onOpen: (id: string) => void; onPlay: (id: string) => void }) {
   const groups: { label: string; items: BriefView[] }[] = [];
   for (const b of briefs) {
     const label = weekBucket(new Date(b.createdAt));
@@ -1992,7 +2018,7 @@ function HistoryScreen({ briefs, onOpen }: { briefs: BriefView[]; onOpen: (id: s
                     return (
                       <div key={b.id} className="rounded-2xl overflow-hidden transition-all" style={{ background: "linear-gradient(155deg, rgba(22,22,34,0.98) 0%, rgba(16,16,28,0.99) 100%)", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 0 0 1px rgba(255,255,255,0.02) inset, 0 2px 12px rgba(0,0,0,0.3)" }}>
                         <div className="flex items-center gap-4 px-5 py-4" style={{ direction: "rtl" }}>
-                          <button onClick={() => onOpen(b.id)} className="flex-shrink-0 transition-all hover:scale-105 active:scale-95" style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(123,111,245,0.13)", border: "1px solid rgba(123,111,245,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                          <button onClick={() => onPlay(b.id)} className="flex-shrink-0 transition-all hover:scale-105 active:scale-95" style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(123,111,245,0.13)", border: "1px solid rgba(123,111,245,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="#9d94f7" stroke="none"><polygon points="6 3 20 12 6 21 6 3" /></svg>
                           </button>
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -2083,7 +2109,11 @@ export function VestoryApp() {
 
   function goTo(s: Screen) { setScreen(s); window.scrollTo(0, 0); }
 
-  function playBrief() { setPlayOnEnter(true); goTo("player"); }
+  function playBrief(id?: string) {
+    if (id) setActiveBriefId(id);
+    setPlayOnEnter(true);
+    goTo("player");
+  }
 
   async function persistProfile(next: Profile) {
     const r = await fetch("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
@@ -2220,7 +2250,9 @@ export function VestoryApp() {
           onSave={handleSavePersonalization}
         />
       )}
-      {screen === "history" && <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} />}
+      {screen === "history" && (
+        <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} onPlay={(id) => playBrief(id)} />
+      )}
     </div>
   );
 }
