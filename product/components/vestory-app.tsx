@@ -1432,7 +1432,7 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-right truncate" style={{ color: isActive ? "#7b6ff5" : isDone ? "#9b9dae" : "#f7f7fb" }}>{ch.title}</p>
-                      <p className="text-xs font-mono mt-0.5" style={{ color: "#565968" }}>{fmtMs(ch.durationMs)}</p>
+                      <p className="text-xs font-mono mt-0.5" style={{ color: "#565968" }}>{fmtMs(ch.startMs)}</p>
                     </div>
                   </button>
                 );
