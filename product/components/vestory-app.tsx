@@ -74,12 +74,11 @@ function TopBar({ onNav, screen, onSignOut }: { onNav: (s: Screen) => void; scre
   if (!showNav) return null;
   return (
     <header className="sticky top-0 z-50" style={{ borderBottom: "1px solid #292c3d", background: "rgba(9,10,17,0.92)", backdropFilter: "blur(18px)" }}>
-      <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+      <div className="max-w-5xl mx-auto px-6 h-14 relative flex items-center justify-between">
         <button onClick={() => onNav("dashboard")} className="flex items-center gap-2.5 group" style={{ background: "none", border: "none", cursor: "pointer" }}>
-          <Logo size="sm" />
           <span className="font-bold text-sm" style={{ color: "#f7f7fb" }}>VESTORY</span>
         </button>
-        <nav className="flex items-center gap-1">
+        <nav className="absolute flex items-center gap-1" style={{ left: "50%", transform: "translateX(-50%)" }}>
           {[
             { id: "dashboard" as Screen, label: "היום" },
             { id: "settings-portfolio" as Screen, label: "תיק" },
