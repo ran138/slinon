@@ -66,6 +66,29 @@ export async function runFactCheck(
   return verdict;
 }
 
+/** One retry on top of the OpenAI SDK's own transport-level retries — covers
+ *  the case where the call itself succeeds but the model doesn't return
+ *  parseable structured output (runFactCheck's own "verification_call_failed").
+ *  Returns null (instead of throwing) once exhausted, so the caller can
+ *  degrade gracefully instead of losing the whole generation to a single
+ *  unavailable verification call. Any other error still propagates. */
+async function runFactCheckWithRetry(
+  client: OpenAI,
+  script: PodcastScript,
+  items: CollectedItem[],
+): Promise<VerificationVerdict | null> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await runFactCheck(client, script, items);
+    } catch (error) {
+      const isCallFailure = error instanceof Error && error.message === "verification_call_failed";
+      if (!isCallFailure) throw error;
+      if (attempt === 2) return null;
+    }
+  }
+  return null;
+}
+
 export interface VerifyResult {
   ok: boolean;
   structuralIssues: string[];
@@ -87,6 +110,30 @@ export async function verifyScript(
     // already known to be bad.
     return { ok: false, structuralIssues, factCheckIssues: [] };
   }
-  const verdict = await runFactCheck(client, script, items);
-  return { ok: verdict.ok, structuralIssues: [], factCheckIssues: verdict.issues };
+
+  const verdict = await runFactCheckWithRetry(client, script, items);
+  if (verdict) return { ok: verdict.ok, structuralIssues: [], factCheckIssues: verdict.issues };
+
+  // The whole-script fact-check couldn't complete even after a retry (API
+  // outage, timeout, persistently unparseable output). Rather than losing
+  // the entire episode to one unavailable call, degrade to verifying each
+  // chapter on its own — this both isolates which chapter is actually the
+  // problem and still gets a real fact-check for every chapter that CAN be
+  // verified. A chapter whose own call also can't complete becomes a
+  // synthetic issue with no matching sentence, which routes into the
+  // existing sentence-level repair in generate.ts and gets replaced with the
+  // safe placeholder line instead of shipping unverified — everything else
+  // ships normally verified.
+  console.warn("[podcast:verify] whole-script fact-check unavailable after retry — falling back to per-chapter verification");
+  const factCheckIssues: VerificationVerdict["issues"] = [];
+  for (let index = 0; index < script.chapters.length; index++) {
+    const singleChapterScript: PodcastScript = { title: script.title, chapters: [script.chapters[index]] };
+    const chapterVerdict = await runFactCheckWithRetry(client, singleChapterScript, items);
+    if (!chapterVerdict) {
+      factCheckIssues.push({ chapterIndex: index, sentence: "", reason: "verification_unavailable" });
+    } else if (!chapterVerdict.ok) {
+      factCheckIssues.push(...chapterVerdict.issues.map((issue) => ({ ...issue, chapterIndex: index })));
+    }
+  }
+  return { ok: factCheckIssues.length === 0, structuralIssues: [], factCheckIssues };
 }

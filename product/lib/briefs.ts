@@ -53,7 +53,7 @@ async function loadProfile(userId: string): Promise<GeneratePodcastInput["profil
     holdings: rows.filter((a) => a.kind === "holding").map(({ name, symbol }) => ({ name, symbol })),
     watchlist: rows.filter((a) => a.kind === "watchlist").map(({ name, symbol }) => ({ name, symbol })),
     interests: ((interests.data ?? []) as Array<{ label: string }>).map(({ label }) => ({ label })),
-    targetMinutes: (settings.data?.target_minutes as number | undefined) ?? 7,
+    targetMinutes: (settings.data?.target_minutes as number | undefined) ?? 5,
   };
 }
 

@@ -35,7 +35,10 @@ export const podcastScriptSchema = z.object({
   chapters: z.array(
     z.object({
       title: z.string().max(120),
-      script: z.string().max(2800),
+      // Sized as a safety ceiling for the longest supported episode (15 min),
+      // not a per-chapter target — the actual length is driven by the
+      // word-count instruction in buildScriptPrompt.
+      script: z.string().max(4200),
       reasonKind: z.enum(["portfolio", "watchlist", "interest", "general"]),
       reasonLabel: z.string().max(80),
       sourceItemIds: z.array(z.string()),

@@ -1,6 +1,25 @@
 // Same speech-rate figure used elsewhere in this codebase's duration estimation.
 export const WORDS_PER_MINUTE = 145;
 
+/** Output-token ceiling for the script-generation call — a safety cap, not a
+ *  target (the actual length comes from the word-count instruction in the
+ *  prompt). Scales with targetMinutes so a longer episode (up to the 15-min
+ *  ceiling) has enough room to actually be written, instead of a single
+ *  fixed budget sized for one specific duration. The formula's constants are
+ *  anchored to 7000 tokens at the old 7-minute default (the last known-good
+ *  value before daily/weekly durations existed), so 5/10-minute output stays
+ *  close to what was already working. */
+export function estimateOutputTokenBudget(targetMinutes: number): number {
+  return Math.round(1400 + targetMinutes * 800);
+}
+
+/** Request timeout for the OpenAI client — also scales with targetMinutes,
+ *  same reasoning as estimateOutputTokenBudget: a longer script takes
+ *  proportionally longer to generate and to fact-check. */
+export function estimateRequestTimeoutMs(targetMinutes: number): number {
+  return Math.round(60_000 + targetMinutes * 6_000);
+}
+
 const DEFAULT_TEXT_MODEL = "gpt-5.6-terra";
 
 export function resolveTextModel(): string {
