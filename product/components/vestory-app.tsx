@@ -1384,7 +1384,7 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
               </div>
 
               <div className="flex items-center justify-between">
-                <button onClick={() => setSpeed(speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1)} className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition-colors hover:bg-white/5" style={{ color: "#9b9dae", border: "1px solid #292c3d", background: "none", cursor: "pointer" }}>{speed}×</button>
+                <button onClick={() => setSpeed(speed === 1 ? 0.5 : speed === 0.5 ? 1.5 : speed === 1.5 ? 2 : 1)} className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition-colors hover:bg-white/5" style={{ color: "#9b9dae", border: "1px solid #292c3d", background: "none", cursor: "pointer" }}>{speed}×</button>
 
                 <div className="flex items-center gap-4">
                   <button onClick={() => activeChapter > 0 && seekToChapter(activeChapter - 1)} disabled={activeChapter === 0} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors" style={{ color: "#9b9dae", background: "none", border: "none", cursor: activeChapter === 0 ? "not-allowed" : "pointer", opacity: activeChapter === 0 ? 0.35 : 1 }}>
