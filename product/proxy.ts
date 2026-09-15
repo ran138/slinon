@@ -28,9 +28,11 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   if (!user && path.startsWith("/vestory_app")) {
+    const nextPath = path + request.nextUrl.search;
     const dest = request.nextUrl.clone();
     dest.pathname = "/login";
-    dest.searchParams.set("next", path);
+    dest.search = "";
+    dest.searchParams.set("next", nextPath);
     return NextResponse.redirect(dest);
   }
   if (user && AUTH_PATHS.includes(path)) {

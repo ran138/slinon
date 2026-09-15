@@ -5,6 +5,7 @@ import { generatePodcastScript } from "@/lib/podcast/generate";
 import { synthesizePodcastAudio, type ChapterRecord } from "@/lib/podcast/synthesize";
 import type { GeneratePodcastInput } from "@/lib/podcast/types";
 import type { BriefView } from "@/lib/domain";
+import { sendPodcastReadyEmail } from "@/lib/email";
 
 type ReasonKind = "portfolio" | "watchlist" | "interest" | "general";
 
@@ -59,6 +60,16 @@ async function loadProfile(userId: string): Promise<GeneratePodcastInput["profil
 async function update(id: string, status: string, progress: number, stageLabel: string) {
   const { error } = await getSupabaseAdmin().from("briefs").update({ status, progress, stage_label: stageLabel }).eq("id", id);
   assertSupabase(error, "update brief progress");
+}
+
+async function notifyBriefReady(briefId: string, userId: string, title: string) {
+  const supabase = getSupabaseAdmin();
+  const [profile, settings] = await Promise.all([
+    supabase.from("profiles").select("email").eq("user_id", userId).maybeSingle(),
+    supabase.from("settings").select("notify_email").eq("user_id", userId).maybeSingle(),
+  ]);
+  if (profile.error || settings.error || !profile.data?.email || settings.data?.notify_email === false) return;
+  await sendPodcastReadyEmail({ to: profile.data.email as string, briefId, title });
 }
 
 async function resetGeneration(id: string, userId: string) {
@@ -174,6 +185,8 @@ async function generate(id: string, userId: string, profile: GeneratePodcastInpu
       duration_ms: totalDurationMs, completed_at: new Date().toISOString(),
     }).eq("id", id);
     assertSupabase(completed.error, "complete brief");
+
+    await notifyBriefReady(id, userId, script.title);
   } catch (error) {
     const code = error instanceof Error ? error.message : "generation_failed";
     const message = code === "missing_api_key"

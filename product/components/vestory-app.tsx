@@ -1744,12 +1744,12 @@ function PortfolioSettingsScreen({ holdings, onSave }: { holdings: Holding[]; on
 
 // ─── PersonalizationScreen ────────────────────────────────────────────────────
 
-function PersonalizationScreen({ watchlist, podcastPlan, scheduleTime, scheduleDay, nextRunAt, interests, onSave }: {
+function PersonalizationScreen({ watchlist, podcastPlan, scheduleTime, scheduleDay, nextRunAt, notifyByEmail, interests, onSave }: {
   watchlist: WatchItem[]; podcastPlan: "daily" | "weekly"; scheduleTime: string;
-  scheduleDay: number | null; nextRunAt: string | null; interests: string[];
+  scheduleDay: number | null; nextRunAt: string | null; notifyByEmail: boolean; interests: string[];
   onSave: (data: {
     watchlist: WatchItem[]; podcastPlan: "daily" | "weekly";
-    scheduleTime: string; scheduleDay: number | null; interests: string[];
+    scheduleTime: string; scheduleDay: number | null; notifyByEmail: boolean; interests: string[];
   }) => Promise<void>;
 }) {
   const predefinedIds = interests.filter((id) => INTERESTS.some((i) => i.id === id));
@@ -1766,6 +1766,7 @@ function PersonalizationScreen({ watchlist, podcastPlan, scheduleTime, scheduleD
   const [watchInput, setWatchInput] = useState("");
   const [watchFocused, setWatchFocused] = useState(false);
   const [rows, setRows] = useState<WatchItem[]>(watchlist);
+  const [emailNotify, setEmailNotify] = useState(notifyByEmail);
   const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const WATCH_SUGGESTIONS: Record<string, string> = {
@@ -1791,6 +1792,7 @@ function PersonalizationScreen({ watchlist, podcastPlan, scheduleTime, scheduleD
         podcastPlan: selectedPlan,
         scheduleTime: selectedTime,
         scheduleDay: selectedPlan === "weekly" ? selectedDay : null,
+        notifyByEmail: emailNotify,
         interests: [...selectedInterests, ...customInterests],
       });
       setSaved("saved");
@@ -1860,6 +1862,28 @@ function PersonalizationScreen({ watchlist, podcastPlan, scheduleTime, scheduleD
               אזור זמן: ישראל (Asia/Jerusalem)
               {nextRunAt ? ` · הפודקאסט הבא מתוכנן להיות מוכן: ${new Date(nextRunAt).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
             </p>
+
+            <div className="flex items-center justify-between" style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #292c3d" }}>
+              <div>
+                <p className="text-sm font-medium" style={{ color: "#f7f7fb" }}>קבלת מייל כשהפודקאסט מוכן</p>
+                <p className="text-xs mt-0.5" style={{ color: "#565968" }}>הודעה עם קישור להאזנה, בשעה שבחרתם למעלה — בלי צורך לזכור לפתוח את האפליקציה.</p>
+              </div>
+              <button
+                onClick={() => setEmailNotify((v) => !v)}
+                role="switch"
+                aria-checked={emailNotify}
+                style={{
+                  flexShrink: 0, width: 40, height: 24, borderRadius: 999, position: "relative",
+                  background: emailNotify ? "linear-gradient(130deg, #7b6ff5, #5b8af0)" : "#292c3d",
+                  border: "none", cursor: "pointer", transition: "background 0.2s",
+                }}
+              >
+                <span style={{
+                  position: "absolute", top: 3, width: 18, height: 18, borderRadius: "50%", background: "#fff",
+                  right: emailNotify ? 3 : 19, transition: "right 0.2s",
+                }} />
+              </button>
+            </div>
           </div>
 
           <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
@@ -2040,6 +2064,7 @@ const EMPTY_PROFILE: Profile = {
   scheduleTime: "07:00",
   scheduleDay: null,
   scheduleTimezone: "Asia/Jerusalem",
+  notifyByEmail: true,
   nextRunAt: null,
   lastScheduledAt: null,
   onboardingComplete: false,
@@ -2079,6 +2104,9 @@ export function VestoryApp() {
 
     initAnalytics();
 
+    // Deep link from the "your podcast is ready" email (/vestory_app?brief=<id>).
+    const linkedBriefId = query.get("brief");
+
     let ignore = false;
     Promise.all([
       fetch("/api/profile").then((r) => r.json() as Promise<Profile>),
@@ -2087,7 +2115,13 @@ export function VestoryApp() {
       if (ignore) return;
       setProfile(p);
       setBriefs(b);
-      setScreen(p.onboardingComplete ? "dashboard" : "welcome");
+      if (linkedBriefId && b.some((brief) => brief.id === linkedBriefId)) {
+        setActiveBriefId(linkedBriefId);
+        setScreen("player");
+        window.history.replaceState(null, "", "/vestory_app");
+      } else {
+        setScreen(p.onboardingComplete ? "dashboard" : "welcome");
+      }
       if (p.email) identifyUser(p.email);
     }).catch(() => { if (!ignore) setLoadError("לא הצלחנו לטעון את הנתונים המקומיים."); })
       .finally(() => { if (!ignore) setLoading(false); });
@@ -2167,7 +2201,7 @@ export function VestoryApp() {
 
   async function handleSavePersonalization(data: {
     watchlist: WatchItem[]; podcastPlan: "daily" | "weekly";
-    scheduleTime: string; scheduleDay: number | null; interests: string[];
+    scheduleTime: string; scheduleDay: number | null; notifyByEmail: boolean; interests: string[];
   }) {
     const holdingAssets = profile.assets.filter((a) => a.kind === "holding");
     const watchAssets: Profile["assets"] = data.watchlist.map((w) => ({ kind: "watchlist", name: w.name, symbol: w.ticker }));
@@ -2178,6 +2212,7 @@ export function VestoryApp() {
       scheduleTime: data.scheduleTime,
       scheduleDay: data.scheduleDay,
       scheduleTimezone: "Asia/Jerusalem",
+      notifyByEmail: data.notifyByEmail,
       assets: [...holdingAssets, ...watchAssets],
       interests: data.interests.map((label) => ({ label, custom: !INTERESTS.some((i) => i.id === label) })),
     });
@@ -2250,6 +2285,7 @@ export function VestoryApp() {
           scheduleTime={profile.scheduleTime}
           scheduleDay={profile.scheduleDay}
           nextRunAt={profile.nextRunAt}
+          notifyByEmail={profile.notifyByEmail}
           interests={profile.interests.map((i) => i.label)}
           onSave={handleSavePersonalization}
         />
