@@ -14,7 +14,6 @@ type Screen =
   | "welcome"
   | "portfolio-entry"
   | "portfolio-confirm"
-  | "watchlist"
   | "generating"
   | "dashboard"
   | "player"
@@ -285,6 +284,8 @@ interface PortfolioDraft {
   pickedAssets: { ticker: string; name: string }[];
   confirmedScreenshot: boolean;
   detectedAssets: { ticker: string; name: string }[];
+  selectedInterests: string[];
+  customInterests: string[];
 }
 
 // ─── PortfolioEntryScreen ─────────────────────────────────────────────────────
@@ -292,7 +293,7 @@ interface PortfolioDraft {
 function PortfolioEntryScreen({
   onNext, onBack, draft, onDraftChange,
 }: {
-  onNext: (holdings: Holding[]) => void;
+  onNext: (holdings: Holding[], interests: string[]) => Promise<void>;
   onBack: () => void;
   draft: PortfolioDraft;
   onDraftChange: (d: PortfolioDraft) => void;
@@ -317,6 +318,11 @@ function PortfolioEntryScreen({
 
   const [continueBusy, setContinueBusy] = useState(false);
   const [continueError, setContinueError] = useState("");
+  const [validationAttempted, setValidationAttempted] = useState(false);
+  const [selectedInterests, setSelectedInterests] = useState<string[]>(draft.selectedInterests);
+  const [customInput, setCustomInput] = useState("");
+  const [customInterests, setCustomInterests] = useState<string[]>(draft.customInterests);
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -335,10 +341,36 @@ function PortfolioEntryScreen({
   const visiblePopular = showAll ? POPULAR_ASSETS : INITIAL_POPULAR;
 
   function togglePicked(ticker: string, name: string) {
+    if (!pickedAssets.find((item) => item.ticker === ticker)) setValidationAttempted(false);
     setPickedAssets((prev) => (prev.find((p) => p.ticker === ticker) ? prev.filter((p) => p.ticker !== ticker) : [...prev, { ticker, name }]));
   }
   function isPicked(ticker: string) {
     return pickedAssets.some((p) => p.ticker === ticker);
+  }
+
+  function toggleInterest(id: string) {
+    if (!selectedInterests.includes(id)) setValidationAttempted(false);
+    setSelectedInterests((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  }
+
+  function addCustomInterest() {
+    const value = customInput.trim();
+    if (value && !customInterests.some((item) => item.toLocaleLowerCase() === value.toLocaleLowerCase())) {
+      setValidationAttempted(false);
+      setCustomInterests((prev) => [...prev, value]);
+    }
+    setCustomInput("");
+    setShowCustomInput(false);
+  }
+
+  function removeCustomInterest(value: string) {
+    setCustomInterests((prev) => prev.filter((item) => item !== value));
+  }
+
+  function onboardingApiPath(path: string) {
+    const query = new URLSearchParams(window.location.search);
+    const isLocalPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname) && query.get("preview") === "onboarding";
+    return isLocalPreview ? `${path}?preview=onboarding` : path;
   }
 
   async function handleFileSelect(file: File) {
@@ -353,8 +385,8 @@ function PortfolioEntryScreen({
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
-      const r = await fetch("/api/portfolio/parse-image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageDataUrl: dataUrl }) });
-      const data = (await r.json()) as { assets?: { symbol: string; name: string }[]; error?: string };
+      const r = await fetch(onboardingApiPath("/api/portfolio/parse-image"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageDataUrl: dataUrl }) });
+      const data = (await r.json().catch(() => ({}))) as { assets?: { symbol: string; name: string }[]; error?: string };
       if (!r.ok) throw new Error(data.error || "ניתוח הצילום נכשל.");
       const assets = (data.assets ?? []).map((a) => ({ ticker: a.symbol, name: a.name }));
       setDetectedAssets(assets);
@@ -376,34 +408,48 @@ function PortfolioEntryScreen({
   const hasText = freeText.trim().length > 0;
   const hasPicked = pickedAssets.length > 0;
   const hasScreenshot = confirmedScreenshot && detectedAssets.length > 0;
-  const canContinue = (hasText || hasPicked || hasScreenshot) && !continueBusy;
+  const hasInterest = selectedInterests.length > 0 || customInterests.length > 0;
+  const hasAnyInput = hasText || hasPicked || hasScreenshot || hasInterest;
+
+  function saveDraft() {
+    onDraftChange({ freeText, pickedAssets, confirmedScreenshot, detectedAssets, selectedInterests, customInterests });
+  }
 
   async function handleContinue() {
-    onDraftChange({ freeText, pickedAssets, confirmedScreenshot, detectedAssets });
+    saveDraft();
+    if (!hasAnyInput) {
+      setValidationAttempted(true);
+      return;
+    }
     setContinueBusy(true);
     setContinueError("");
     try {
       let fromText: Holding[] = [];
+      let fromTextInterests: string[] = [];
       if (freeText.trim()) {
-        const r = await fetch("/api/portfolio/parse", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: freeText }) });
-        const data = (await r.json()) as { assets?: { symbol: string; name: string; quantity: string | null; averageCost: string | null }[]; error?: string };
-        if (!r.ok) throw new Error(data.error || "לא הצלחנו לזהות את הנכסים.");
+        const r = await fetch(onboardingApiPath("/api/portfolio/parse"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: freeText }) });
+        const data = (await r.json().catch(() => ({}))) as { assets?: { symbol: string; name: string; quantity: string | null; averageCost: string | null }[]; interests?: string[]; error?: string };
+        if (!r.ok) throw new Error(data.error || "לא הצלחנו לזהות את הנכסים והנושאים.");
         fromText = (data.assets ?? []).map((a, i) => ({ id: `p-${Date.now()}-${i}`, ticker: a.symbol, name: a.name, quantity: a.quantity ?? "", avgCost: a.averageCost ?? "" }));
+        fromTextInterests = data.interests ?? [];
       }
 
-      const parsedTickers = new Set(fromText.map((h) => h.ticker));
+      const parsedTickers = new Set(fromText.map((h) => h.ticker.toLocaleUpperCase()));
       const fromPicked: Holding[] = pickedAssets
-        .filter((a) => !parsedTickers.has(a.ticker))
+        .filter((a) => !parsedTickers.has(a.ticker.toLocaleUpperCase()))
         .map((a, i) => ({ id: `pk-${i}`, ticker: a.ticker, name: a.name, quantity: "", avgCost: "" }));
 
       const fromScreenshot: Holding[] = hasScreenshot
-        ? detectedAssets.filter((a) => !parsedTickers.has(a.ticker) && !fromPicked.some((p) => p.ticker === a.ticker)).map((a, i) => ({ id: `sc-${i}`, ticker: a.ticker, name: a.name, quantity: "", avgCost: "" }))
+        ? detectedAssets.filter((a) => !parsedTickers.has(a.ticker.toLocaleUpperCase()) && !fromPicked.some((p) => p.ticker.toLocaleUpperCase() === a.ticker.toLocaleUpperCase())).map((a, i) => ({ id: `sc-${i}`, ticker: a.ticker, name: a.name, quantity: "", avgCost: "" }))
         : [];
 
       const all = [...fromText, ...fromPicked, ...fromScreenshot];
-      onNext(all.length > 0 ? all : [{ id: "empty", ticker: freeText.trim().slice(0, 12).toUpperCase() || "?", name: freeText.trim(), quantity: "", avgCost: "" }]);
+      const allInterests = Array.from(new Map(
+        [...selectedInterests, ...customInterests, ...fromTextInterests].map((value) => [value.toLocaleLowerCase(), value]),
+      ).values());
+      await onNext(all, allInterests);
     } catch (e) {
-      setContinueError(e instanceof Error ? e.message : "לא הצלחנו לזהות את הנכסים.");
+      setContinueError(e instanceof Error ? e.message : "לא הצלחנו לזהות את הנכסים והנושאים.");
     } finally {
       setContinueBusy(false);
     }
@@ -423,19 +469,10 @@ function PortfolioEntryScreen({
       <div className="absolute pointer-events-none" style={{ width: 640, height: 520, top: "40%", left: "50%", transform: "translate(-50%, -50%)", background: "radial-gradient(ellipse 55% 55% at 50% 48%, rgba(100,88,230,0.14) 0%, rgba(80,120,240,0.06) 50%, transparent 72%)" }} />
 
       <div className="relative z-10 w-full max-w-[560px]" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            {[1, 2, 3].map((i) => (
-              <div key={i} style={{ height: 3, borderRadius: 99, transition: "all 0.3s", width: i === 1 ? 32 : 10, background: i === 1 ? "linear-gradient(90deg, #7b6ff5, #5b8af0)" : "rgba(255,255,255,0.1)" }} />
-            ))}
-          </div>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "#7070a0" }}>שלב 1 מתוך 3</span>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <h2 style={{ fontSize: "1.65rem", fontWeight: 700, color: "#eeeef2", letterSpacing: "-0.02em", margin: 0 }}>מה יש בתיק ההשקעות שלך?</h2>
-          <p style={{ fontSize: "0.92rem", lineHeight: 1.6, color: "#a0a0bc", margin: 0 }}>
-            פשוט כתבו את הנכסים בהם אתם מחזיקים. רק שם הנכס נדרש — שאר הפרטים ניתן להוסיף אם רוצים.
+        <div dir="rtl" style={{ display: "flex", flexDirection: "column", gap: 6, textAlign: "right" }}>
+          <h2 style={{ fontSize: "1.65rem", fontWeight: 700, color: "#eeeef2", letterSpacing: "-0.02em", margin: 0 }}>מה מעניין אתכם בעולם ההשקעות?</h2>
+          <p style={{ fontSize: "0.92rem", lineHeight: 1.65, color: "#a0a0bc", margin: 0 }}>
+            ספרו לנו אילו נכסים אתם מחזיקים או עוקבים אחריהם, ואילו נושאים מעניינים אתכם — כדי ש-<bdi dir="ltr">Vestory</bdi> יוכל להתאים לכם תוכן אישי ורלוונטי יותר.
           </p>
         </div>
 
@@ -447,32 +484,22 @@ function PortfolioEntryScreen({
         }}>
           {accentLine}
           <div style={{ padding: "16px 20px 18px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
               <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#5a5a80" }}>כתיבה חופשית</span>
-              <span style={{ fontSize: "0.68rem", color: "#9d94f7", fontWeight: 600, background: "rgba(123,111,245,0.1)", padding: "1px 8px", borderRadius: 5, border: "1px solid rgba(123,111,245,0.18)" }}>מומלץ</span>
             </div>
             <label style={{ display: "block", marginBottom: 8, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#5a5a80" }}>
-              כתבו את תיק ההשקעות שלכם
+              כתבו נכסים או נושאים שמעניינים אתכם
             </label>
             <textarea
               ref={textareaRef}
               value={freeText}
-              onChange={(e) => setFreeText(e.target.value)}
+              onChange={(e) => { setFreeText(e.target.value); if (e.target.value.trim()) setValidationAttempted(false); }}
               onFocus={() => setTextFocused(true)}
               onBlur={() => setTextFocused(false)}
-              placeholder="לדוגמה: NVIDIA, S&P 500 וביטקוין"
+              placeholder="לדוגמה: NVIDIA, S&P 500, זהב, AI"
               style={{ width: "100%", minHeight: 80, background: "transparent", border: "none", outline: "none", resize: "none", fontFamily: "Heebo, sans-serif", fontSize: "1rem", lineHeight: 1.7, color: "#eeeef2", direction: "rtl", caretColor: "#7b6ff5" }}
             />
           </div>
-        </div>
-
-        <div style={{ padding: "12px 15px 13px", borderRadius: 12, background: "rgba(91,138,240,0.05)", border: "1px solid rgba(91,138,240,0.12)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a9ef5" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><path d="M12 8v4m0 4h.01" /></svg>
-            <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "#9898c0", margin: 0 }}>שם הנכס הוא חובה</p>
-          </div>
-          <p style={{ fontSize: "0.76rem", lineHeight: 1.6, color: "#686890", margin: "0 0 8px 20px" }}>ניתן להוסיף פרטים נוספים כדי שנוכל להתאים את הפודקאסט בצורה מדויקת יותר.</p>
-          <p style={{ fontSize: "0.71rem", color: "#484868", margin: "0 0 0 20px" }}>שווי • כמות • מחיר קנייה ממוצע • מטבע</p>
         </div>
 
         <div style={cardStyle}>
@@ -651,7 +678,7 @@ function PortfolioEntryScreen({
                     ))}
                     <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "flex-end" }}>
                       <button onClick={() => { setUploadState("idle"); setUploadFile(null); setDetectedAssets([]); setConfirmedScreenshot(false); }} style={{ padding: "6px 14px", borderRadius: 8, fontSize: "0.78rem", fontWeight: 600, background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "#686888", cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>ביטול</button>
-                      <button onClick={() => setConfirmedScreenshot(true)} style={{ padding: "6px 16px", borderRadius: 8, fontSize: "0.78rem", fontWeight: 700, background: confirmedScreenshot ? "rgba(52,211,153,0.15)" : "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: confirmedScreenshot ? "1px solid rgba(52,211,153,0.35)" : "none", color: confirmedScreenshot ? "#34d399" : "#fff", cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>
+                      <button onClick={() => { setConfirmedScreenshot(true); setValidationAttempted(false); }} style={{ padding: "6px 16px", borderRadius: 8, fontSize: "0.78rem", fontWeight: 700, background: confirmedScreenshot ? "rgba(52,211,153,0.15)" : "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: confirmedScreenshot ? "1px solid rgba(52,211,153,0.35)" : "none", color: confirmedScreenshot ? "#34d399" : "#fff", cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>
                         {confirmedScreenshot ? "אושר ✓" : "אישור ומשך"}
                       </button>
                     </div>
@@ -664,25 +691,95 @@ function PortfolioEntryScreen({
           )}
         </div>
 
+        <div style={cardStyle}>
+          {accentLine}
+          <div style={{ padding: "18px 20px 20px" }}>
+            <h3 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#d0d0ea", margin: "0 0 6px" }}>תחומי עניין</h3>
+            <p style={{ fontSize: "0.78rem", lineHeight: 1.6, color: "#686888", margin: "0 0 14px" }}>נושאים שתרצו לשמוע עליהם בפודקאסט גם כשהם לא קשורים ישירות לנכס בתיק.</p>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+              {INTERESTS.map((interest) => {
+                const selected = selectedInterests.includes(interest.id);
+                return (
+                  <button key={interest.id} onClick={() => toggleInterest(interest.id)} style={{
+                    padding: "6px 14px", borderRadius: 20, fontSize: "0.82rem", fontWeight: selected ? 600 : 500, fontFamily: "Heebo, sans-serif", cursor: "pointer", transition: "all 0.18s",
+                    background: selected ? "linear-gradient(130deg, rgba(123,111,245,0.28), rgba(91,138,240,0.22))" : "rgba(255,255,255,0.04)",
+                    color: selected ? "#c4beff" : "#686888", border: `1px solid ${selected ? "rgba(123,111,245,0.45)" : "rgba(255,255,255,0.09)"}`,
+                    boxShadow: selected ? "0 0 12px rgba(123,111,245,0.2)" : "none",
+                  }}>
+                    {interest.label}
+                  </button>
+                );
+              })}
+              {customInterests.map((interest) => (
+                <div key={interest} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px 6px 14px", borderRadius: 20, background: "linear-gradient(130deg, rgba(91,138,240,0.22), rgba(123,111,245,0.18))", border: "1px solid rgba(91,138,240,0.35)" }}>
+                  <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "#a8c0f8" }}>{interest}</span>
+                  <button onClick={() => removeCustomInterest(interest)} aria-label={`הסרת ${interest}`} style={{ background: "none", border: "none", color: "#506080", cursor: "pointer", lineHeight: 0, padding: 0 }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {showCustomInput ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", borderRadius: 10, background: "rgba(91,138,240,0.07)", border: "1px solid rgba(91,138,240,0.22)", marginBottom: 10 }}>
+                <input
+                  autoFocus
+                  value={customInput}
+                  onChange={(e) => setCustomInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") addCustomInterest(); if (e.key === "Escape") setShowCustomInput(false); }}
+                  placeholder="לדוגמה: OpenAI, רובוטיקה, SpaceX"
+                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: "0.85rem", color: "#d0d0ee", fontFamily: "Heebo, sans-serif", direction: "rtl", caretColor: "#7b6ff5" }}
+                />
+                <button onClick={addCustomInterest} style={{ padding: "3px 12px", borderRadius: 7, background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", color: "#fff", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "Heebo, sans-serif", flexShrink: 0 }}>הוספה</button>
+                <button onClick={() => setShowCustomInput(false)} style={{ background: "none", border: "none", color: "#484868", cursor: "pointer", fontSize: "0.78rem", fontFamily: "Heebo, sans-serif", flexShrink: 0 }}>ביטול</button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: "0.75rem", color: "#484868" }}>לא מצאתם את מה שמעניין אתכם?</span>
+                <button onClick={() => setShowCustomInput(true)} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", border: "none", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, color: "#6868a0", fontFamily: "Heebo, sans-serif", padding: 0 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                  הוספת תחום עניין
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "11px 14px", borderRadius: 12, background: "rgba(91,138,240,0.05)", border: "1px solid rgba(91,138,240,0.12)" }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5b8af0" strokeWidth="2" strokeLinecap="round" style={{ marginTop: 2, flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+          <p style={{ fontSize: "0.77rem", lineHeight: 1.6, color: "#606080", margin: 0 }}>ככל שנדע טוב יותר מה מעניין אתכם, נוכל לבחור עבורכם נושאים רלוונטיים יותר לפודקאסט.</p>
+        </div>
+
         {continueError && <Notice tone="error">{continueError}</Notice>}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <p
+            role={validationAttempted ? "alert" : undefined}
+            style={{
+              margin: 0, textAlign: "center", fontSize: "0.76rem", lineHeight: 1.5,
+              color: validationAttempted ? "#d98b8b" : "#666886",
+              transition: "color 0.2s",
+            }}
+          >
+            כדי להמשיך, יש להוסיף לפחות פריט אחד באחת מהאפשרויות בעמוד.
+          </p>
           <button
             onClick={handleContinue}
-            disabled={!canContinue}
+            disabled={continueBusy}
             className="relative overflow-hidden group transition-all active:scale-[0.98]"
             style={{
               width: "100%", height: 52, borderRadius: 14, fontWeight: 700, fontSize: "0.92rem", fontFamily: "Heebo, sans-serif",
-              background: canContinue ? "linear-gradient(130deg, #7b6ff5 0%, #6055e0 45%, #5b8af0 100%)" : "rgba(255,255,255,0.05)",
-              color: canContinue ? "#fff" : "#404060",
-              border: canContinue ? "none" : "1px solid rgba(255,255,255,0.08)",
-              boxShadow: canContinue ? "0 2px 20px rgba(110,95,240,0.38), 0 1px 0 rgba(255,255,255,0.12) inset" : "none",
-              cursor: canContinue ? "pointer" : "not-allowed", transition: "all 0.25s",
+              background: !continueBusy ? "linear-gradient(130deg, #7b6ff5 0%, #6055e0 45%, #5b8af0 100%)" : "rgba(255,255,255,0.05)",
+              color: !continueBusy ? "#fff" : "#404060",
+              border: !continueBusy ? "none" : "1px solid rgba(255,255,255,0.08)",
+              boxShadow: !continueBusy ? "0 2px 20px rgba(110,95,240,0.38), 0 1px 0 rgba(255,255,255,0.12) inset" : "none",
+              cursor: !continueBusy ? "pointer" : "wait", transition: "all 0.25s",
             }}
           >
             <span className="relative">{continueBusy ? "בודקים…" : "המשך"}</span>
           </button>
-          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", color: "#505070", fontFamily: "Heebo, sans-serif", padding: "4px 0" }}>חזרה</button>
+          <button onClick={() => { saveDraft(); onBack(); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", color: "#505070", fontFamily: "Heebo, sans-serif", padding: "4px 0" }}>חזרה</button>
         </div>
       </div>
     </div>
@@ -715,15 +812,6 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
       <div className="absolute pointer-events-none" style={{ width: 620, height: 520, top: "44%", left: "50%", transform: "translate(-50%, -50%)", background: "radial-gradient(ellipse 55% 55% at 50% 48%, rgba(100,88,230,0.13) 0%, rgba(80,120,240,0.06) 50%, transparent 72%)" }} />
 
       <div className="relative z-10 w-full max-w-[540px]" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {[1, 2, 3].map((i) => (
-              <div key={i} style={{ height: 3, borderRadius: 99, width: i === 1 ? 32 : 10, background: i === 1 ? "linear-gradient(90deg, #7b6ff5, #5b8af0)" : "rgba(255,255,255,0.1)" }} />
-            ))}
-          </div>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "#7070a0" }}>שלב 1 מתוך 3</span>
-        </div>
-
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <h2 style={{ fontSize: "1.65rem", fontWeight: 700, color: "#eeeef2", letterSpacing: "-0.02em", margin: 0 }}>זה מה שהבנו מהתיק שלך</h2>
           <p style={{ fontSize: "0.92rem", lineHeight: 1.6, color: "#a0a0bc", margin: 0 }}>בדקו שהנכסים זוהו נכון. אם משהו לא מדויק, אפשר לתקן לפני שממשיכים.</p>
@@ -820,6 +908,9 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
 
 // ─── WatchlistScreen ──────────────────────────────────────────────────────────
 
+// Kept temporarily for reference while the unchanged confirmation screen remains;
+// the merged onboarding route no longer renders this former third screen.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function WatchlistScreen({ onNext, onBack }: { onNext: (watchlist: WatchItem[], interests: string[]) => Promise<void>; onBack: () => void }) {
   const [watchInput, setWatchInput] = useState("");
   const [watchFocused, setWatchFocused] = useState(false);
@@ -2097,16 +2188,26 @@ export function VestoryApp() {
   const [playOnEnter, setPlayOnEnter] = useState(false);
 
   const [onboardingHoldings, setOnboardingHoldings] = useState<Holding[]>([]);
-  const [portfolioDraft, setPortfolioDraft] = useState<PortfolioDraft>({ freeText: "", pickedAssets: [], confirmedScreenshot: false, detectedAssets: [] });
+  const [onboardingInterests, setOnboardingInterests] = useState<string[]>([]);
+  const [portfolioDraft, setPortfolioDraft] = useState<PortfolioDraft>({
+    freeText: "",
+    pickedAssets: [],
+    confirmedScreenshot: false,
+    detectedAssets: [],
+    selectedInterests: [],
+    customInterests: [],
+  });
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const isLocalPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname);
     const previewScreen = isLocalPreview ? query.get("preview") : null;
 
-    if (previewScreen === "preferences" || previewScreen === "welcome") {
+    if (previewScreen === "preferences" || previewScreen === "welcome" || previewScreen === "onboarding") {
+      // Local-only preview routing intentionally initializes several related client states together.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfile({ ...EMPTY_PROFILE, onboardingComplete: previewScreen === "preferences" });
-      setScreen(previewScreen === "preferences" ? "settings-personalization" : "welcome");
+      setScreen(previewScreen === "preferences" ? "settings-personalization" : previewScreen === "onboarding" ? "portfolio-entry" : "welcome");
       setLoading(false);
       return;
     }
@@ -2166,13 +2267,12 @@ export function VestoryApp() {
     return list;
   }
 
-  async function handleWatchlistNext(watchlist: WatchItem[], interests: string[]) {
-    const watchAssets: Profile["assets"] = watchlist.map((w) => ({ kind: "watchlist", name: w.name, symbol: w.ticker }));
-    const holdingAssets: Profile["assets"] = onboardingHoldings.filter((h) => h.ticker && h.ticker !== "?").map((h) => ({ kind: "holding", name: h.name, symbol: h.ticker, quantity: h.quantity || null, averageCost: h.avgCost || null }));
+  async function handleOnboardingComplete(holdings: Holding[], interests: string[]) {
+    const holdingAssets: Profile["assets"] = holdings.filter((h) => h.ticker && h.ticker !== "?").map((h) => ({ kind: "holding", name: h.name, symbol: h.ticker, quantity: h.quantity || null, averageCost: h.avgCost || null }));
     const nextProfile: Profile = {
       ...profile,
       onboardingComplete: true,
-      assets: [...holdingAssets, ...watchAssets],
+      assets: holdingAssets,
       interests: interests.map((label) => ({ label, custom: !INTERESTS.some((i) => i.id === label) })),
     };
     await persistProfile(nextProfile);
@@ -2262,7 +2362,12 @@ export function VestoryApp() {
         <PortfolioEntryScreen
           draft={portfolioDraft}
           onDraftChange={setPortfolioDraft}
-          onNext={(h) => { setOnboardingHoldings(h); goTo(h.length > 0 ? "portfolio-confirm" : "watchlist"); }}
+          onNext={async (holdings, interests) => {
+            setOnboardingHoldings(holdings);
+            setOnboardingInterests(interests);
+            if (holdings.length > 0) goTo("portfolio-confirm");
+            else await handleOnboardingComplete([], interests);
+          }}
           onBack={() => goTo("welcome")}
         />
       )}
@@ -2270,12 +2375,15 @@ export function VestoryApp() {
       {screen === "portfolio-confirm" && (
         <PortfolioConfirmScreen
           holdings={onboardingHoldings}
-          onNext={(rows) => { setOnboardingHoldings(rows); goTo("watchlist"); }}
+          onNext={(rows) => {
+            setOnboardingHoldings(rows);
+            void handleOnboardingComplete(rows, onboardingInterests).catch((error) => {
+              setLoadError(error instanceof Error ? error.message : "שמירת הפרופיל נכשלה.");
+            });
+          }}
           onBack={() => goTo("portfolio-entry")}
         />
       )}
-
-      {screen === "watchlist" && <WatchlistScreen onNext={handleWatchlistNext} onBack={() => goTo("portfolio-confirm")} />}
 
       {screen === "generating" && generateBriefId && <GeneratingScreen briefId={generateBriefId} onDone={() => void handleGeneratingDone()} onBack={() => goTo("dashboard")} />}
 

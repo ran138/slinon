@@ -24,10 +24,13 @@ export const profileUpdateSchema = z.object({
   notifyByEmail: z.boolean(),
   onboardingComplete: z.boolean(),
   assets: z.array(assetInputSchema).max(50),
-  interests: z.array(z.object({ label: z.string().trim().min(1).max(80), custom: z.boolean().optional() })).min(1).max(30),
+  interests: z.array(z.object({ label: z.string().trim().min(1).max(80), custom: z.boolean().optional() })).max(30),
 }).superRefine((value, context) => {
   if (value.podcastPlan === "weekly" && value.scheduleDay === null) {
     context.addIssue({ code: "custom", path: ["scheduleDay"], message: "Weekly plans require a day" });
+  }
+  if (value.assets.length === 0 && value.interests.length === 0) {
+    context.addIssue({ code: "custom", path: ["assets"], message: "At least one asset or interest is required" });
   }
 });
 

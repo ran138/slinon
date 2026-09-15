@@ -89,7 +89,7 @@ async function resetGeneration(id: string, userId: string) {
 export async function createBrief(userId: string): Promise<string> {
   const supabase = getSupabaseAdmin();
   const profile = await loadProfile(userId);
-  if (!profile.holdings.length || !profile.interests.length) throw new Error("profile_incomplete");
+  if (!profile.holdings.length && !profile.watchlist.length && !profile.interests.length) throw new Error("profile_incomplete");
 
   const active = await supabase
     .from("briefs")

@@ -21,8 +21,11 @@ function normalizeAsset(asset: z.infer<typeof parsedAssets>["assets"][number]) {
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const isLocalPreview = process.env.LOCAL_PREVIEW === "true" && new URL(request.url).searchParams.get("preview") === "onboarding";
+  if (!isLocalPreview) {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
 
   const { imageDataUrl } = z.object({ imageDataUrl: z.string().startsWith("data:image/") }).parse(await request.json());
 
