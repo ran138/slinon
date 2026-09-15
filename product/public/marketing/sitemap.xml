@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://slinon.me/</loc><priority>1.0</priority></url>
+  <url><loc>https://slinon.me/demo/</loc><priority>0.9</priority></url>
+  <url><loc>https://slinon.me/how-it-works/</loc><priority>0.8</priority></url>
+  <url><loc>https://slinon.me/examples/</loc><priority>0.8</priority></url>
+  <url><loc>https://slinon.me/compare/</loc><priority>0.8</priority></url>
+  <url><loc>https://slinon.me/compare/podcasts/</loc><priority>0.6</priority></url>
+  <url><loc>https://slinon.me/compare/news/</loc><priority>0.6</priority></url>
+  <url><loc>https://slinon.me/compare/newsletters/</loc><priority>0.6</priority></url>
+  <url><loc>https://slinon.me/compare/ai/</loc><priority>0.6</priority></url>
+  <url><loc>https://slinon.me/trust/</loc><priority>0.8</priority></url>
+</urlset>

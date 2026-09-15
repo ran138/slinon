@@ -1,46 +1,51 @@
-# Vestory — product (alpha)
+# Vestory product
 
-The alpha version of Vestory: same UI as the `vestory/` POC, but the database is
-real Postgres (Supabase) instead of local SQLite, and the podcast generator is
-the newer `lib/podcast/*` pipeline instead of the POC's inline generator.
-
-`vestory/` stays the running app until this is deliberately cut over — this
-folder builds and is tested independently in the meantime.
+The complete Vestory application lives in this directory. It combines the
+production UI and deployment flow with the modular, verified podcast pipeline,
+Supabase Postgres, Supabase Storage, and OpenAI research, generation,
+verification, embeddings, and speech synthesis.
 
 ## Setup
 
 Requirements: Node.js 22.13+, a Supabase project, and an OpenAI API key.
 
-1. Copy `.env.example` to `.env.local` and fill in:
-   - `SUPABASE_URL` / `SUPABASE_SECRET_KEY` — Project Settings → API
-   - `POSTGRES_URL_NON_POOLING` — Project Settings → Database → Connection string → URI (direct, port 5432) — only needed to run `db:schema`
-   - `OPENAI_API_KEY`
-2. `npm install`
-3. `npm run db:schema` — applies every file in `supabase/migrations/` to your Supabase project (idempotent, safe to re-run).
-4. `npm run dev` and open `http://127.0.0.1:5175/vestory_app`.
+1. Copy `.env.example` to `.env.local` and configure `OPENAI_API_KEY`,
+   `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `POSTGRES_URL_NON_POOLING`.
+2. Run `npm install`.
+3. Run `npm run db:schema` to apply every migration in
+   `supabase/migrations/`.
+4. Run `npm run dev` and open `http://127.0.0.1:5175/vestory_app`.
 
-## What's different from `vestory/`
+## Runtime flow
 
-| | `vestory/` (POC) | `product/` (alpha) |
-|---|---|---|
-| Database | Local SQLite (`data/vestory.sqlite`) | Postgres via Supabase |
-| Audio storage | Local disk (`data/audio/`) | Supabase Storage (`vestory-audio` bucket) |
-| Generator | Inline OpenAI web-search pipeline (`lib/briefs.ts`) | `lib/podcast/*` — separate generate/verify/synthesize modules, reads source material from the `collected_items` table |
-| UI | Same component, same design | Same component, same design |
+1. The profile API stores holdings, watchlist entries, interests, and duration
+   preferences in Supabase.
+2. Brief creation refreshes cited portfolio knowledge from bounded sources and
+   embeds it into `knowledge_documents`.
+3. The modular podcast pipeline retrieves the relevant documents, generates a
+   Hebrew script, verifies every chapter, and repairs unsupported sentences.
+4. Speech synthesis runs per chapter, uploads MP3 files to the private
+   `vestory-audio` bucket, and stores chapter timing and source links.
+5. The player streams full or partial audio with HTTP range support.
 
-## Known gap
+If a live knowledge refresh temporarily fails, generation may use the last
+successfully indexed snapshot. It fails safely when no verified documents are
+available.
 
-`lib/podcast/dataSource.ts` reads from the `collected_items` table, which
-nothing currently populates — there's no ingestion job yet. Until one exists,
-generated episodes will have little or no real material to work from. This
-is a data problem, not a wiring problem; the pipeline itself is verified
-working end-to-end (see `vestory/app/api/debug-podcast-supabase-test/route.ts`
-for a live diagnostic against the same schema).
+## Commands
 
-## Schema
+- `npm run dev` — start Next.js on port 5175.
+- `npm run build` — create the Cloudflare/Sites production build.
+- `npm run build:next` — validate the native Next.js production build.
+- `npm run typecheck` — validate TypeScript.
+- `npm run lint` — validate source conventions.
+- `npm run db:schema` — apply the Supabase schema.
+- `npm run db:migrate` — import a legacy local SQLite dataset and audio.
+- `npm run knowledge:refresh` — refresh portfolio knowledge manually.
 
-All tables live in `supabase/migrations/*.sql`, applied in filename order:
-`settings`, `onboarding_draft`, `assets`, `interests`, `briefs`, `chapters`,
-`sources`, `collected_items`, `podcast_cache` — plus the `vestory-audio`
-storage bucket and two helper RPC functions (`replace_profile`,
-`reset_brief_generation`) used for atomic multi-row writes.
+## Data model
+
+The migrations create profile, onboarding, brief, chapter, source, knowledge,
+collection, and podcast-cache tables. Row Level Security blocks browser roles;
+all privileged access uses the server-only Supabase secret. Never expose that
+secret through a `NEXT_PUBLIC_` variable.

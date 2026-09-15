@@ -153,6 +153,7 @@ export async function generatePodcastScript(input: GeneratePodcastInput): Promis
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 90_000, maxRetries: 2 });
 
   const items = await fetchCollectedItems(topicsFromProfile(input.profile), input.windowStart, input.windowEnd);
+  if (!items.length) throw new Error("research_failed");
 
   const prompt = buildScriptPrompt(input, items);
   let script = await generateOnce(client, prompt);

@@ -4,6 +4,6 @@
 ui_web_app
 on_slinon_page
 marketing_page
-vestory/.next
-vestory/data
-vestory/node_modules
+product/.next
+product/data
+product/node_modules

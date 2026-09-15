@@ -4,6 +4,7 @@ import { generatePodcastScript } from "@/lib/podcast/generate";
 import { synthesizePodcastAudio, type ChapterRecord } from "@/lib/podcast/synthesize";
 import type { GeneratePodcastInput } from "@/lib/podcast/types";
 import type { BriefView } from "@/lib/domain";
+import { refreshPortfolioKnowledge } from "@/lib/knowledge.mjs";
 
 type ReasonKind = "portfolio" | "watchlist" | "interest" | "general";
 
@@ -59,6 +60,27 @@ async function update(id: string, status: string, progress: number, stageLabel: 
   assertSupabase(error, "update brief progress");
 }
 
+async function resetGeneration(id: string) {
+  const supabase = getSupabaseAdmin();
+  const storage = supabase.storage.from(AUDIO_BUCKET);
+  const listed = await storage.list(id, { limit: 1000 });
+  assertSupabase(listed.error, "list old brief audio");
+  if (listed.data?.length) {
+    const removed = await storage.remove(listed.data.map(({ name }) => `${id}/${name}`));
+    assertSupabase(removed.error, "remove old brief audio");
+  }
+
+  const reset = await supabase.rpc("reset_brief_generation", { p_id: id });
+  assertSupabase(reset.error, "reset brief generation");
+}
+
+function knowledgeAssets(profile: GeneratePodcastInput["profile"]) {
+  return [
+    ...profile.holdings.map(({ name, symbol }) => ({ kind: "holding", name, symbol })),
+    ...profile.watchlist.map(({ name, symbol }) => ({ kind: "watchlist", name, symbol })),
+  ];
+}
+
 export async function createBrief(): Promise<string> {
   const supabase = getSupabaseAdmin();
   const profile = await loadProfile();
@@ -99,14 +121,27 @@ function startGeneration(id: string, profile: GeneratePodcastInput["profile"]) {
 async function generate(id: string, profile: GeneratePodcastInput["profile"]) {
   const supabase = getSupabaseAdmin();
   try {
-    if (!process.env.OPENAI_API_KEY) throw new Error("missing_api_key");
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    if (!openaiApiKey) throw new Error("missing_api_key");
+
+    await resetGeneration(id);
 
     await update(id, "researching", 20, "אוספים נתונים מאומתים");
-    // Deliberately no refreshPortfolioKnowledge() call here: ingestion (real
-    // web searches + embeddings) is expensive and belongs in a separate,
-    // deliberate step (scripts/import-portfolio-knowledge.mjs, or a future
-    // scheduled/manual refresh), not on every single generation. This only
-    // reads the already-indexed knowledge_documents table.
+    try {
+      await refreshPortfolioKnowledge({
+        supabase,
+        assets: knowledgeAssets(profile),
+        openaiApiKey,
+        textModel: process.env.OPENAI_TEXT_MODEL,
+        embeddingModel: process.env.OPENAI_EMBEDDING_MODEL,
+      });
+    } catch (error) {
+      // A temporary source failure should not discard a previously indexed
+      // knowledge snapshot. Retrieval below still requires stored documents
+      // and fails safely when none exist.
+      console.warn("[knowledge:refresh] using the last indexed snapshot", error);
+    }
+
     const windowStart = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
     const windowEnd = new Date().toISOString();
     const input: GeneratePodcastInput = { profile, windowStart, windowEnd };

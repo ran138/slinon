@@ -40,7 +40,7 @@ Next.js application on Vercel
           Web research, structured brief generation, and speech synthesis
 ```
 
-The deployed application is a Next.js 16 modular monolith using React 19, TypeScript, Tailwind CSS, Supabase, and the OpenAI API. Vercel deploys the `vestory` directory from the `main` branch.
+The deployed application is a Next.js 16 modular monolith using React 19, TypeScript, Tailwind CSS, Supabase, and the OpenAI API. Vercel deploys the `product` directory from the `main` branch.
 
 ### Data model
 
@@ -52,13 +52,13 @@ The deployed application is a Next.js 16 modular monolith using React 19, TypeSc
 - `chapters` — ordered scripts, personalization reasons, and audio references
 - `sources` — citations associated with generated briefs
 
-The canonical schema is defined in [`vestory/supabase/migrations/202609140001_initial.sql`](vestory/supabase/migrations/202609140001_initial.sql).
+The canonical schema is defined in [`product/supabase/migrations/202609140001_initial.sql`](product/supabase/migrations/202609140001_initial.sql).
 
 ## Repository structure
 
 ```text
 slinon/
-├── vestory/                 # Deployed full-stack Next.js application
+├── product/                 # Deployed full-stack Next.js application
 │   ├── app/                 # Pages and API route handlers
 │   ├── components/          # Product UI and shared components
 │   ├── db/                  # Server-only Supabase client
@@ -69,11 +69,10 @@ slinon/
 ├── marketing_page/          # Source for the static marketing experience
 ├── on_slinon_page/          # Source for the Slinon product landing page
 ├── ui_vestory_web_app/      # Standalone Vite UI prototype
-├── product/podcast/         # Experimental standalone podcast pipeline
 └── README.md
 ```
 
-`vestory` is the production application. The other directories preserve marketing sources, earlier interface work, and experimental modules; they are not separate production services.
+`product` is the production application. The other directories preserve marketing sources and earlier interface work; they are not separate production services.
 
 ## Getting started
 
@@ -88,12 +87,12 @@ slinon/
 
 ```bash
 git clone https://github.com/ran138/slinon.git
-cd slinon/vestory
+cd slinon/product
 npm ci
 cp .env.example .env.local
 ```
 
-Add the required credentials to `vestory/.env.local`:
+Add the required credentials to `product/.env.local`:
 
 ```dotenv
 OPENAI_API_KEY=
@@ -124,13 +123,13 @@ The migration creates the application tables, enables Row Level Security, grants
 npm run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The functional product is available at [http://127.0.0.1:5173/vestory_app](http://127.0.0.1:5173/vestory_app).
+Open [http://127.0.0.1:5175](http://127.0.0.1:5175). The functional product is available at [http://127.0.0.1:5175/vestory_app](http://127.0.0.1:5175/vestory_app).
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start the local development server on port 5173 |
+| `npm run dev` | Start the local development server on port 5175 |
 | `npm run build` | Create a production build |
 | `npm start` | Run the production build locally |
 | `npm run typecheck` | Validate the TypeScript project |
@@ -186,7 +185,7 @@ The repository is connected to the Vercel project `slinon` with the following pr
 ```text
 Git repository:    ran138/slinon
 Production branch: main
-Root directory:    vestory
+Root directory:    product
 Production domain: https://www.slinon.me
 ```
 
@@ -201,11 +200,11 @@ The current prototype uses one shared workspace and does **not** implement user 
 ## Contributing
 
 1. Create a branch from `main`.
-2. Keep secrets in `vestory/.env.local` only.
+2. Keep secrets in `product/.env.local` only.
 3. Run the validation checks before opening a pull request:
 
 ```bash
-cd vestory
+cd product
 npm run lint
 npm run typecheck
 npm run build
