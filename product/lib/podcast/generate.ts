@@ -9,7 +9,7 @@ import {
   verifyScript, checkReferentialIntegrity, checkProhibitedPhrases, checkLatinScriptLeakage,
   type VerifyResult,
 } from "./verify";
-import { resolveTextModel, PROHIBITED_ADVICE_PATTERN, LATIN_LETTERS_PATTERN } from "./constants";
+import { resolveTextModel, PROHIBITED_ADVICE_PATTERN, LATIN_LETTERS_PATTERN, estimateOutputTokenBudget, estimateRequestTimeoutMs } from "./constants";
 
 export interface GeneratePodcastResult {
   script: PodcastScript;
@@ -27,12 +27,12 @@ function topicsFromProfile(profile: GeneratePodcastInput["profile"]): Array<{ ki
   ];
 }
 
-async function generateOnce(client: OpenAI, prompt: string): Promise<PodcastScript> {
+async function generateOnce(client: OpenAI, prompt: string, targetMinutes: number): Promise<PodcastScript> {
   const model = resolveTextModel();
   const response = await client.responses.parse({
     model,
     store: false,
-    max_output_tokens: 7000,
+    max_output_tokens: estimateOutputTokenBudget(targetMinutes),
     input: prompt,
     text: { format: zodTextFormat(podcastScriptSchema, "podcast_script") },
   });
@@ -147,21 +147,28 @@ function repairChapter(chapter: Chapter, issues: IndexedIssue[], knownItemIds: S
  * only the specific bad sentence(s)/citation(s) using the verifier's own
  * findings — and keeps every topic. No extra API calls; the repair is pure
  * local text editing over content already paid for.
+ *
+ * Verification itself being unavailable (not "found issues" but "couldn't
+ * complete") is handled inside verifyScript (see verify.ts) — it retries,
+ * then degrades to per-chapter checks, surfacing any chapter that still
+ * can't be verified as an issue that flows into the same repair path above.
+ * generatePodcastScript never has to know the difference.
  */
 export async function generatePodcastScript(input: GeneratePodcastInput): Promise<GeneratePodcastResult> {
   if (!process.env.OPENAI_API_KEY) throw new Error("missing_api_key");
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 90_000, maxRetries: 2 });
+  const targetMinutes = input.profile.targetMinutes;
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: estimateRequestTimeoutMs(targetMinutes), maxRetries: 2 });
 
   const items = await fetchCollectedItems(topicsFromProfile(input.profile), input.windowStart, input.windowEnd);
   if (!items.length) throw new Error("research_failed");
 
   const prompt = buildScriptPrompt(input, items);
-  let script = await generateOnce(client, prompt);
+  let script = await generateOnce(client, prompt, targetMinutes);
   let result = await verifyScript(client, script, items);
 
   if (!result.ok) {
     const correctivePrompt = buildCorrectivePrompt(prompt, { issues: toIndexedIssues(result) });
-    script = await generateOnce(client, correctivePrompt);
+    script = await generateOnce(client, correctivePrompt, targetMinutes);
     result = await verifyScript(client, script, items);
   }
 

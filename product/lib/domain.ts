@@ -13,7 +13,10 @@ export const assetInputSchema = z.object({
 });
 
 export const profileUpdateSchema = z.object({
-  targetMinutes: z.union([z.literal(5), z.literal(7), z.literal(10)]),
+  // 15 isn't produced by targetMinutesForPlan yet (reserved for a future
+  // premium/weekly tier) but the generation pipeline already supports it —
+  // allow it here so the schema doesn't block that plan once it exists.
+  targetMinutes: z.union([z.literal(5), z.literal(10), z.literal(15)]),
   podcastPlan: z.enum(["daily", "weekly"]),
   scheduleTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
   scheduleDay: z.number().int().min(1).max(5).nullable(),
