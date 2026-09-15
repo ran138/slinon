@@ -4,7 +4,6 @@ import { generatePodcastScript } from "@/lib/podcast/generate";
 import { synthesizePodcastAudio, type ChapterRecord } from "@/lib/podcast/synthesize";
 import type { GeneratePodcastInput } from "@/lib/podcast/types";
 import type { BriefView } from "@/lib/domain";
-import { refreshPortfolioKnowledge } from "@/lib/knowledge.mjs";
 
 type ReasonKind = "portfolio" | "watchlist" | "interest" | "general";
 
@@ -75,13 +74,6 @@ async function resetGeneration(id: string) {
   assertSupabase(reset.error, "reset brief generation");
 }
 
-function knowledgeAssets(profile: GeneratePodcastInput["profile"]) {
-  return [
-    ...profile.holdings.map(({ name, symbol }) => ({ kind: "holding", name, symbol })),
-    ...profile.watchlist.map(({ name, symbol }) => ({ kind: "watchlist", name, symbol })),
-  ];
-}
-
 export async function createBrief(): Promise<string> {
   const supabase = getSupabaseAdmin();
   const profile = await loadProfile();
@@ -128,21 +120,11 @@ async function generate(id: string, profile: GeneratePodcastInput["profile"]) {
     await resetGeneration(id);
 
     await update(id, "researching", 20, "אוספים נתונים מאומתים");
-    try {
-      await refreshPortfolioKnowledge({
-        supabase,
-        assets: knowledgeAssets(profile),
-        openaiApiKey,
-        textModel: process.env.OPENAI_TEXT_MODEL,
-        embeddingModel: process.env.OPENAI_EMBEDDING_MODEL,
-      });
-    } catch (error) {
-      // A temporary source failure should not discard a previously indexed
-      // knowledge snapshot. Retrieval below still requires stored documents
-      // and fails safely when none exist.
-      console.warn("[knowledge:refresh] using the last indexed snapshot", error);
-    }
-
+    // Deliberately no refreshPortfolioKnowledge() call here: ingestion (real
+    // web searches + embeddings) is expensive and belongs in a separate,
+    // deliberate step (scripts/import-portfolio-knowledge.mjs, or a future
+    // scheduled/manual refresh), not on every single generation. This only
+    // reads the already-indexed knowledge_documents table.
     const windowDays = profile.podcastPlan === "weekly" ? 7 : 1;
     const windowStart = new Date(Date.now() - windowDays * 24 * 3600 * 1000).toISOString();
     const windowEnd = new Date().toISOString();
