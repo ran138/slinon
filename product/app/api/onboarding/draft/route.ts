@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { assertSupabase, getSupabaseAdmin } from "@/db";
+import { getCurrentUser } from "@/lib/auth";
 import { assetInputSchema } from "@/lib/domain";
 
 export const runtime = "nodejs";
@@ -16,18 +17,24 @@ function sameOrigin(request: Request) {
 }
 
 export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const { data, error } = await getSupabaseAdmin()
-    .from("onboarding_draft").select("portfolio_text,assets_json").eq("id", 1).maybeSingle();
+    .from("onboarding_draft").select("portfolio_text,assets_json").eq("user_id", user.id).maybeSingle();
   assertSupabase(error, "load onboarding draft");
   return NextResponse.json(data ? { text: data.portfolio_text, assets: data.assets_json } : { text: "", assets: [] });
 }
 
 export async function PUT(request: Request) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "origin_not_allowed" }, { status: 403 });
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const parsed = draftSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "invalid_draft" }, { status: 400 });
   const { error } = await getSupabaseAdmin().from("onboarding_draft").upsert({
-    id: 1, portfolio_text: parsed.data.text, assets_json: parsed.data.assets, updated_at: new Date().toISOString(),
+    user_id: user.id, portfolio_text: parsed.data.text, assets_json: parsed.data.assets, updated_at: new Date().toISOString(),
   });
   assertSupabase(error, "save onboarding draft");
   return NextResponse.json(parsed.data);
@@ -35,7 +42,10 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "origin_not_allowed" }, { status: 403 });
-  const { error } = await getSupabaseAdmin().from("onboarding_draft").delete().eq("id", 1);
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const { error } = await getSupabaseAdmin().from("onboarding_draft").delete().eq("user_id", user.id);
   assertSupabase(error, "delete onboarding draft");
   return new NextResponse(null, { status: 204 });
 }

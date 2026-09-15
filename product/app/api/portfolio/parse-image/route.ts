@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
+import { getCurrentUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,9 @@ function normalizeAsset(asset: z.infer<typeof parsedAssets>["assets"][number]) {
 }
 
 export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const { imageDataUrl } = z.object({ imageDataUrl: z.string().startsWith("data:image/") }).parse(await request.json());
 
   if (!process.env.OPENAI_API_KEY) {

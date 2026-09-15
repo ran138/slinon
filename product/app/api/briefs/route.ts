@@ -1,18 +1,23 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, assertSupabase } from "@/db";
+import { getCurrentUser } from "@/lib/auth";
 import { createBrief, getBrief } from "@/lib/briefs";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const { data, error } = await getSupabaseAdmin()
     .from("briefs")
     .select("id")
+    .eq("user_id", user.id)
     .eq("status", "completed")
     .order("completed_at", { ascending: false })
     .limit(100);
   assertSupabase(error, "list briefs");
-  const briefs = await Promise.all((data ?? []).map(({ id }) => getBrief(id as string)));
+  const briefs = await Promise.all((data ?? []).map(({ id }) => getBrief(id as string, user.id)));
   return NextResponse.json(briefs.filter(Boolean));
 }
 
@@ -21,8 +26,11 @@ export async function POST(request: Request) {
   if (origin && new URL(origin).host !== request.headers.get("host")) {
     return NextResponse.json({ error: "origin_not_allowed" }, { status: 403 });
   }
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   try {
-    const id = await createBrief();
+    const id = await createBrief(user.id);
     return NextResponse.json({ id }, { status: 202 });
   } catch {
     return NextResponse.json({ error: "profile_incomplete" }, { status: 400 });
