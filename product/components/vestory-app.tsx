@@ -6,6 +6,7 @@ import type { BriefView, ProfileUpdate } from "@/lib/domain";
 import { Notice } from "@/components/notice";
 import { Logo } from "@/components/logo";
 import { initAnalytics, identifyUser, resetAnalytics } from "@/lib/analytics";
+import { LegalFooter } from "@/components/legal/footer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -2257,6 +2258,7 @@ export function VestoryApp() {
       {screen === "history" && (
         <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} onPlay={(id) => playBrief(id)} />
       )}
+      <LegalFooter />
     </div>
   );
 }

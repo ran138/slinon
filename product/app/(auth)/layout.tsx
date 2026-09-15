@@ -1,9 +1,10 @@
 import { Logo } from "@/components/logo";
+import { LegalFooter } from "@/components/legal/footer";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-6"
+      className="min-h-screen flex flex-col items-center justify-center px-6"
       style={{ background: "#080910", direction: "rtl", fontFamily: "Heebo, sans-serif" }}
     >
       <div style={{ width: "100%", maxWidth: 380, display: "flex", flexDirection: "column", gap: 24 }}>
@@ -19,6 +20,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           {children}
         </div>
       </div>
+      <LegalFooter />
     </div>
   );
 }

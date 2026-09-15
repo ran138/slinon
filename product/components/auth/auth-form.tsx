@@ -19,6 +19,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(
     oauthError ? "ההתחברות עם הספק נכשלה. נסו שוב." : null,
@@ -34,14 +35,19 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       setError("הסיסמאות לא תואמות.");
       return;
     }
+    if (mode === "sign-up" && !agreedToTerms) {
+      setError("יש לאשר את תנאי השימוש ומדיניות הפרטיות כדי להמשיך.");
+      return;
+    }
 
     setSubmitting(true);
     try {
       const endpoint = mode === "sign-in" ? "/api/auth/sign-in" : "/api/auth/sign-up";
+      const body = mode === "sign-in" ? { email, password } : { email, password, agreedToTerms };
       const r = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(body),
       });
       const data = (await r.json()) as { ok?: boolean; needsConfirmation?: boolean; error?: string };
       if (!r.ok) {
@@ -128,13 +134,29 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         </a>
       )}
 
+      {mode === "sign-up" && (
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: "0.78rem", color: "#9b9dae", lineHeight: 1.6, cursor: "pointer" }}>
+          <input
+            type="checkbox" required checked={agreedToTerms}
+            onChange={(e) => setAgreedToTerms(e.target.checked)}
+            style={{ marginTop: 3, flexShrink: 0, width: 15, height: 15, accentColor: "#7b6ff5" }}
+          />
+          <span>
+            קראתי ואני מסכים/ה ל<a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: "#7b6ff5" }}>תנאי השימוש</a>{" "}
+            ול<a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "#7b6ff5" }}>מדיניות הפרטיות</a>
+          </span>
+        </label>
+      )}
+
       <button
         type="submit"
-        disabled={submitting}
+        disabled={submitting || (mode === "sign-up" && !agreedToTerms)}
         style={{
           height: 46, borderRadius: 12, border: "none", color: "#fff", fontSize: "0.92rem", fontWeight: 700,
-          background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", cursor: submitting ? "default" : "pointer",
-          opacity: submitting ? 0.7 : 1, fontFamily: "Heebo, sans-serif",
+          background: "linear-gradient(130deg, #7b6ff5, #5b8af0)",
+          cursor: submitting || (mode === "sign-up" && !agreedToTerms) ? "not-allowed" : "pointer",
+          opacity: submitting ? 0.7 : mode === "sign-up" && !agreedToTerms ? 0.45 : 1,
+          fontFamily: "Heebo, sans-serif",
         }}
       >
         {submitting ? "רגע…" : mode === "sign-in" ? "התחברות" : "יצירת חשבון"}
@@ -146,7 +168,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         <div style={{ flex: 1, height: 1, background: "#292c3d" }} />
       </div>
 
-      <OAuthButtons next={next} />
+      <OAuthButtons next={next} disabled={mode === "sign-up" && !agreedToTerms} />
 
       <p style={{ fontSize: "0.82rem", color: "#9b9dae", textAlign: "center", marginTop: 4 }}>
         {mode === "sign-in" ? (
