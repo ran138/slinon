@@ -1,0 +1,36 @@
+name: Supabase Stay Alive
+
+on:
+  schedule:
+    # Three real database reads per day, away from the top of the hour.
+    - cron: "17 1,9,17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-stay-alive
+  cancel-in-progress: true
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Run a lightweight database query
+        env:
+          KEEPALIVE_SECRET: ${{ secrets.KEEPALIVE_SECRET }}
+          KEEPALIVE_URL: https://slinon.me/api/keepalive
+        run: |
+          test -n "$KEEPALIVE_SECRET"
+          response="$(curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-all-errors \
+            --max-time 30 \
+            --header "Authorization: Bearer ${KEEPALIVE_SECRET}" \
+            "$KEEPALIVE_URL")"
+          printf '%s' "$response" | grep -q '"ok":true'

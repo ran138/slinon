@@ -32,6 +32,15 @@ If a live knowledge refresh temporarily fails, generation may use the last
 successfully indexed snapshot. It fails safely when no verified documents are
 available.
 
+## Supabase keepalive
+
+The `supabase-keepalive.yml` GitHub Actions workflow calls the protected
+`/api/keepalive` route three times per day. The route performs one lightweight,
+read-only query and returns no database rows. Configure the same randomly
+generated `KEEPALIVE_SECRET` in both Vercel Production environment variables and
+GitHub Actions repository secrets. This reduces the likelihood of Free Plan
+inactivity pausing, but it is not a substitute for backups or a paid plan.
+
 ## Commands
 
 - `npm run dev` — start Next.js on port 5175.
