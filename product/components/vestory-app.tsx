@@ -1125,8 +1125,8 @@ function GeneratingScreen({ briefId, onDone, onBack }: { briefId: string; onDone
 
 const WAVEFORM_HEIGHTS = Array.from({ length: 60 }, (_, i) => 20 + Math.sin(i * 0.4) * 14 + Math.abs(Math.sin(i * 1.1 + 0.7)) * 22);
 
-function DashboardScreen({ holdings, brief, onNav, onGenerate, generating }: {
-  holdings: Holding[]; brief: BriefView | null; onNav: (s: Screen) => void; onGenerate: () => void; generating: boolean;
+function DashboardScreen({ holdings, brief, onNav, onPlay, onGenerate, generating }: {
+  holdings: Holding[]; brief: BriefView | null; onNav: (s: Screen) => void; onPlay: () => void; onGenerate: () => void; generating: boolean;
 }) {
   const today = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long" });
 
@@ -1173,7 +1173,7 @@ function DashboardScreen({ holdings, brief, onNav, onGenerate, generating }: {
                     <h2 className="text-xl font-bold leading-snug" style={{ color: "#f7f7fb" }}>{brief.title || "הפודקאסט של היום"}</h2>
                     <p className="text-sm mt-1" style={{ color: "#9b9dae" }}>{formatSeconds(totalDuration / 1000)} · {brief.chapters.length} נושאים</p>
                   </div>
-                  <button onClick={() => onNav("player")} className="flex-shrink-0 transition-all hover:scale-105 active:scale-95" style={{ width: 56, height: 56, borderRadius: "50%", background: "linear-gradient(135deg, #7b6ff5, #5b8af0)", boxShadow: "0 2px 20px rgba(110,95,240,0.45), 0 0 0 1px rgba(255,255,255,0.12) inset", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <button onClick={onPlay} className="flex-shrink-0 transition-all hover:scale-105 active:scale-95" style={{ width: 56, height: 56, borderRadius: "50%", background: "linear-gradient(135deg, #7b6ff5, #5b8af0)", boxShadow: "0 2px 20px rgba(110,95,240,0.45), 0 0 0 1px rgba(255,255,255,0.12) inset", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="6 3 20 12 6 21 6 3" /></svg>
                   </button>
                 </div>
@@ -1268,9 +1268,11 @@ function DashboardScreen({ holdings, brief, onNav, onGenerate, generating }: {
 
 // ─── PlayerScreen ─────────────────────────────────────────────────────────────
 
-function PlayerScreen({ brief, onNav }: { brief: BriefView | null; onNav: (s: Screen) => void }) {
+function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
+  brief: BriefView | null; onNav: (s: Screen) => void; autoplay?: boolean; onAutoplayed?: () => void;
+}) {
   const [activeChapter, setActiveChapter] = useState(0);
-  const [playing, setPlaying] = useState(false);
+  const [playing, setPlaying] = useState(autoplay);
   const [elapsed, setElapsed] = useState(0);
   const [speed, setSpeed] = useState(1);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -1278,6 +1280,24 @@ function PlayerScreen({ brief, onNav }: { brief: BriefView | null; onNav: (s: Sc
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = speed;
   }, [speed]);
+
+  // Single source of truth for actually starting/stopping playback — the
+  // `playing` state (toggled by the play/pause button, chapter navigation,
+  // and this screen's own initial autoplay request) drives the real
+  // <audio> element here, instead of each caller needing to imperatively
+  // call .play()/.pause() on the ref itself.
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) void el.play().catch(() => setPlaying(false));
+    else el.pause();
+  }, [playing, activeChapter]);
+
+  useEffect(() => {
+    if (autoplay) onAutoplayed?.();
+    // Only meant to fire once, for the mount that requested it — not on every dependency change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!brief) return <div className="min-h-screen flex items-center justify-center" style={{ color: "#9b9dae" }}>הבריף לא נמצא.</div>;
 
@@ -1361,7 +1381,7 @@ function PlayerScreen({ brief, onNav }: { brief: BriefView | null; onNav: (s: Sc
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20" /><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" strokeWidth="2" fill="none" /></svg>
                   </button>
                   <button
-                    onClick={() => { if (!audioRef.current) return; if (playing) audioRef.current.pause(); else void audioRef.current.play(); }}
+                    onClick={() => setPlaying((p) => !p)}
                     disabled={!chapter?.audioUrl}
                     className="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
                     style={{ background: "linear-gradient(135deg, #7b6ff5, #5b8af0)", border: "none", cursor: chapter?.audioUrl ? "pointer" : "not-allowed", opacity: chapter?.audioUrl ? 1 : 0.4 }}
@@ -1961,6 +1981,7 @@ export function VestoryApp() {
   const [activeBriefId, setActiveBriefId] = useState<string | null>(null);
   const [generateBriefId, setGenerateBriefId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [playOnEnter, setPlayOnEnter] = useState(false);
 
   const [onboardingHoldings, setOnboardingHoldings] = useState<Holding[]>([]);
   const [portfolioDraft, setPortfolioDraft] = useState<PortfolioDraft>({ freeText: "", pickedAssets: [], confirmedScreenshot: false, detectedAssets: [] });
@@ -1981,6 +2002,8 @@ export function VestoryApp() {
   }, []);
 
   function goTo(s: Screen) { setScreen(s); window.scrollTo(0, 0); }
+
+  function playBrief() { setPlayOnEnter(true); goTo("player"); }
 
   async function persistProfile(next: Profile) {
     const r = await fetch("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
@@ -2090,9 +2113,11 @@ export function VestoryApp() {
       {screen === "generating" && generateBriefId && <GeneratingScreen briefId={generateBriefId} onDone={() => void handleGeneratingDone()} onBack={() => goTo("dashboard")} />}
 
       {screen === "dashboard" && (
-        <DashboardScreen holdings={holdings} brief={activeBrief} onNav={goTo} onGenerate={() => void handleGenerateFromDashboard()} generating={generating} />
+        <DashboardScreen holdings={holdings} brief={activeBrief} onNav={goTo} onPlay={playBrief} onGenerate={() => void handleGenerateFromDashboard()} generating={generating} />
       )}
-      {screen === "player" && <PlayerScreen brief={activeBrief} onNav={goTo} />}
+      {screen === "player" && (
+        <PlayerScreen brief={activeBrief} onNav={goTo} autoplay={playOnEnter} onAutoplayed={() => setPlayOnEnter(false)} />
+      )}
       {screen === "sources" && <SourcesScreen brief={activeBrief} onNav={goTo} />}
       {screen === "settings-portfolio" && <PortfolioSettingsScreen holdings={holdings} onSave={handleSaveHoldings} />}
       {screen === "settings-personalization" && (
