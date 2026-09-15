@@ -1,17 +1,23 @@
 import { NextResponse } from "next/server";
 import { AUDIO_BUCKET, assertSupabase, audioObjectPath, getSupabaseAdmin } from "@/db";
+import { getCurrentUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string; chapter: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const { id, chapter } = await params;
   const supabase = getSupabaseAdmin();
-  let storedValue: string | null = null;
 
+  const owned = await supabase.from("briefs").select("status").eq("id", id).eq("user_id", user.id).maybeSingle();
+  assertSupabase(owned.error, "load brief audio");
+  if (!owned.data) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  let storedValue: string | null = null;
   if (chapter === "full") {
-    const { data, error } = await supabase.from("briefs").select("status").eq("id", id).maybeSingle();
-    assertSupabase(error, "load brief audio");
-    if (data?.status === "completed") storedValue = `${id}/podcast.mp3`;
+    if (owned.data.status === "completed") storedValue = `${id}/podcast.mp3`;
   } else {
     const { data, error } = await supabase.from("chapters").select("audio_file")
       .eq("id", chapter).eq("brief_id", id).maybeSingle();

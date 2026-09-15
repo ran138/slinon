@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
 import { assertSupabase, getSupabaseAdmin } from "@/db";
+import { getCurrentUser } from "@/lib/auth";
 import { profileUpdateSchema } from "@/lib/domain";
 import { computeNextRunAt, targetMinutesForPlan } from "@/lib/schedule";
 
 export const runtime = "nodejs";
 
 export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const supabase = getSupabaseAdmin();
   const [settings, assets, interests] = await Promise.all([
-    supabase.from("settings").select("target_minutes,onboarding_complete,podcast_plan,schedule_time,schedule_day,schedule_timezone,next_run_at,last_scheduled_at").eq("id", 1).maybeSingle(),
-    supabase.from("assets").select("id,kind,name,symbol,asset_class,exchange,quantity,average_cost,currency,created_at,updated_at").order("created_at"),
-    supabase.from("interests").select("id,label,custom,created_at").order("created_at"),
+    supabase.from("settings").select("target_minutes,onboarding_complete,podcast_plan,schedule_time,schedule_day,schedule_timezone,next_run_at,last_scheduled_at").eq("user_id", user.id).maybeSingle(),
+    supabase.from("assets").select("id,kind,name,symbol,asset_class,exchange,quantity,average_cost,currency,created_at,updated_at").eq("user_id", user.id).order("created_at"),
+    supabase.from("interests").select("id,label,custom,created_at").eq("user_id", user.id).order("created_at"),
   ]);
   assertSupabase(settings.error, "load settings");
   assertSupabase(assets.error, "load assets");
@@ -47,6 +51,9 @@ export async function PUT(request: Request) {
   if (origin && new URL(origin).host !== request.headers.get("host")) {
     return NextResponse.json({ error: "origin_not_allowed" }, { status: 403 });
   }
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const parsed = profileUpdateSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "invalid_profile" }, { status: 400 });
 
@@ -54,7 +61,7 @@ export async function PUT(request: Request) {
   const supabase = getSupabaseAdmin();
   const current = await supabase.from("settings")
     .select("podcast_plan,schedule_time,schedule_day,schedule_timezone,next_run_at")
-    .eq("id", 1).maybeSingle();
+    .eq("user_id", user.id).maybeSingle();
   assertSupabase(current.error, "load current podcast schedule");
 
   const normalizedDay = value.podcastPlan === "weekly" ? value.scheduleDay : null;
@@ -74,6 +81,7 @@ export async function PUT(request: Request) {
   const targetMinutes = targetMinutesForPlan(value.podcastPlan);
 
   const { error } = await supabase.rpc("replace_profile", {
+    p_user_id: user.id,
     p_assets: value.assets.map((item) => ({
       id: item.id ?? crypto.randomUUID(), kind: item.kind, name: item.name, symbol: item.symbol,
       asset_class: item.assetClass ?? null, exchange: item.exchange ?? null,
@@ -94,7 +102,7 @@ export async function PUT(request: Request) {
     schedule_timezone: value.scheduleTimezone,
     next_run_at: nextRunAt,
     target_minutes: targetMinutes,
-  }).eq("id", 1);
+  }).eq("user_id", user.id);
   assertSupabase(schedule.error, "save podcast schedule");
   return GET();
 }

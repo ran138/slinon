@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
+import { getCurrentUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
 const parsedAssets = z.object({ assets: z.array(z.object({ name: z.string(), symbol: z.string(), quantity: z.string().nullable(), averageCost: z.string().nullable(), currency: z.string().nullable() })).max(20) });
@@ -34,6 +35,9 @@ function normalizeAsset(asset: { name: string; symbol: string; quantity: string 
 }
 
 export async function POST(request: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const { text } = z.object({ text: z.string().trim().min(1).max(2000) }).parse(await request.json());
   const knownAssets = findKnownAssets(text);
   if (knownAssets.length) return NextResponse.json({ assets: knownAssets, localMatch: true });

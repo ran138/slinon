@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, DragEvent, MouseEvent as ReactMouseEvent } from "react";
 import type { BriefView, ProfileUpdate } from "@/lib/domain";
+import { Notice } from "@/components/notice";
+import { Logo } from "@/components/logo";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,17 +67,7 @@ function fmtMs(ms?: number | null) {
 
 // ─── Small shared components ──────────────────────────────────────────────────
 
-function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const w = size === "sm" ? 58 : size === "lg" ? 110 : 80;
-  return (
-    <div style={{ isolation: "isolate", display: "flex", alignItems: "center", flexShrink: 0 }}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/assets/slinon-logo-transparent.png" alt="slinon" style={{ width: w, height: "auto", opacity: 1 }} />
-    </div>
-  );
-}
-
-function TopBar({ onNav, screen }: { onNav: (s: Screen) => void; screen: Screen }) {
+function TopBar({ onNav, screen, onSignOut }: { onNav: (s: Screen) => void; screen: Screen; onSignOut: () => void }) {
   const showNav = ["dashboard", "player", "sources", "settings-portfolio", "settings-personalization", "history"].includes(screen);
   if (!showNav) return null;
   return (
@@ -106,24 +98,15 @@ function TopBar({ onNav, screen }: { onNav: (s: Screen) => void; screen: Screen 
             </button>
           ))}
         </nav>
+        <button
+          onClick={onSignOut}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/5"
+          style={{ color: "#565968", border: "1px solid #292c3d", background: "none", cursor: "pointer" }}
+        >
+          התנתקות
+        </button>
       </div>
     </header>
-  );
-}
-
-function Notice({ children, tone = "info" }: { children: React.ReactNode; tone?: "info" | "error" }) {
-  return (
-    <div
-      role="alert"
-      style={{
-        padding: "12px 15px", borderRadius: 12, fontSize: "0.85rem", lineHeight: 1.6,
-        background: tone === "error" ? "rgba(248,113,113,0.08)" : "rgba(91,138,240,0.06)",
-        border: `1px solid ${tone === "error" ? "rgba(248,113,113,0.25)" : "rgba(91,138,240,0.14)"}`,
-        color: tone === "error" ? "#f5a3a3" : "#a0b8ec",
-      }}
-    >
-      {children}
-    </div>
   );
 }
 
@@ -2108,6 +2091,11 @@ export function VestoryApp() {
 
   function goTo(s: Screen) { setScreen(s); window.scrollTo(0, 0); }
 
+  async function handleSignOut() {
+    await fetch("/api/auth/sign-out", { method: "POST" });
+    window.location.href = "/login";
+  }
+
   function playBrief(id?: string) {
     if (id) setActiveBriefId(id);
     setPlayOnEnter(true);
@@ -2202,9 +2190,20 @@ export function VestoryApp() {
   const watchlist = profile.assets.filter((a) => a.kind === "watchlist").map((a) => ({ ticker: a.symbol, name: a.name }));
   const activeBrief = briefs.find((b) => b.id === activeBriefId) ?? briefs[0] ?? null;
 
+  const topBarScreens: Screen[] = ["dashboard", "player", "sources", "settings-portfolio", "settings-personalization", "history"];
+
   return (
     <div className="vestory-ui" style={{ minHeight: "100%", background: "#080910" }}>
-      <TopBar onNav={goTo} screen={screen} />
+      <TopBar onNav={goTo} screen={screen} onSignOut={() => void handleSignOut()} />
+      {!topBarScreens.includes(screen) && (
+        <button
+          onClick={() => void handleSignOut()}
+          className="fixed top-4 left-4 z-50 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/5"
+          style={{ color: "#565968", border: "1px solid #292c3d", background: "rgba(9,10,17,0.7)", backdropFilter: "blur(8px)", cursor: "pointer" }}
+        >
+          התנתקות
+        </button>
+      )}
       {loadError && <div className="max-w-5xl mx-auto px-6 pt-4"><Notice tone="error">{loadError}</Notice></div>}
 
       {screen === "welcome" && <WelcomeScreen onNext={() => goTo("portfolio-entry")} />}

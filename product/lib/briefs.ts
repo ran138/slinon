@@ -1,10 +1,10 @@
 import "server-only";
+import { after } from "next/server";
 import { getSupabaseAdmin, assertSupabase, AUDIO_BUCKET } from "@/db";
 import { generatePodcastScript } from "@/lib/podcast/generate";
 import { synthesizePodcastAudio, type ChapterRecord } from "@/lib/podcast/synthesize";
 import type { GeneratePodcastInput } from "@/lib/podcast/types";
 import type { BriefView } from "@/lib/domain";
-import { refreshPortfolioKnowledge } from "@/lib/knowledge.mjs";
 
 type ReasonKind = "portfolio" | "watchlist" | "interest" | "general";
 
@@ -35,12 +35,12 @@ function canonicalReason(
   return { reasonKind: "general", reasonLabel: "שוק וכלכלה" };
 }
 
-async function loadProfile(): Promise<GeneratePodcastInput["profile"]> {
+async function loadProfile(userId: string): Promise<GeneratePodcastInput["profile"]> {
   const supabase = getSupabaseAdmin();
   const [settings, assets, interests] = await Promise.all([
-    supabase.from("settings").select("target_minutes,podcast_plan").eq("id", 1).maybeSingle(),
-    supabase.from("assets").select("kind,name,symbol"),
-    supabase.from("interests").select("label"),
+    supabase.from("settings").select("target_minutes,podcast_plan").eq("user_id", userId).maybeSingle(),
+    supabase.from("assets").select("kind,name,symbol").eq("user_id", userId),
+    supabase.from("interests").select("label").eq("user_id", userId),
   ]);
   assertSupabase(settings.error, "load settings");
   assertSupabase(assets.error, "load assets");
@@ -61,7 +61,7 @@ async function update(id: string, status: string, progress: number, stageLabel: 
   assertSupabase(error, "update brief progress");
 }
 
-async function resetGeneration(id: string) {
+async function resetGeneration(id: string, userId: string) {
   const supabase = getSupabaseAdmin();
   const storage = supabase.storage.from(AUDIO_BUCKET);
   const listed = await storage.list(id, { limit: 1000 });
@@ -71,78 +71,70 @@ async function resetGeneration(id: string) {
     assertSupabase(removed.error, "remove old brief audio");
   }
 
-  const reset = await supabase.rpc("reset_brief_generation", { p_id: id });
+  const reset = await supabase.rpc("reset_brief_generation", { p_id: id, p_user_id: userId });
   assertSupabase(reset.error, "reset brief generation");
 }
 
-function knowledgeAssets(profile: GeneratePodcastInput["profile"]) {
-  return [
-    ...profile.holdings.map(({ name, symbol }) => ({ kind: "holding", name, symbol })),
-    ...profile.watchlist.map(({ name, symbol }) => ({ kind: "watchlist", name, symbol })),
-  ];
-}
-
-export async function createBrief(): Promise<string> {
+export async function createBrief(userId: string): Promise<string> {
   const supabase = getSupabaseAdmin();
-  const profile = await loadProfile();
+  const profile = await loadProfile(userId);
   if (!profile.holdings.length || !profile.interests.length) throw new Error("profile_incomplete");
 
   const active = await supabase
     .from("briefs")
     .select("id")
+    .eq("user_id", userId)
     .in("status", ["queued", "researching", "scripting", "synthesizing"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   assertSupabase(active.error, "find active brief");
   if (active.data) {
-    startGeneration(active.data.id as string, profile);
+    startGeneration(active.data.id as string, userId, profile);
     return active.data.id as string;
   }
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const created = await supabase.from("briefs").insert({
-    id, status: "queued", progress: 4, stage_label: "הבריף נכנס לתור",
+    id, user_id: userId, status: "queued", progress: 4, stage_label: "הבריף נכנס לתור",
     profile_snapshot: profile, target_minutes: profile.targetMinutes, created_at: now,
   });
   assertSupabase(created.error, "create brief");
 
-  startGeneration(id, profile);
+  startGeneration(id, userId, profile);
   return id;
 }
 
-function startGeneration(id: string, profile: GeneratePodcastInput["profile"]) {
+function startGeneration(id: string, userId: string, profile: GeneratePodcastInput["profile"]) {
   if (activeJobs.has(id)) return;
-  const job = generate(id, profile);
+  const job = generate(id, userId, profile);
   activeJobs.set(id, job);
   void job.finally(() => { if (activeJobs.get(id) === job) activeJobs.delete(id); });
+  // Vercel may freeze the serverless function once its HTTP response is
+  // sent — generation is fire-and-forget by design (the client polls
+  // GET /api/briefs/[id] for progress), so without this, unfinished
+  // background work can be killed mid-generation. after() keeps the
+  // function alive until the job actually settles.
+  try {
+    after(async () => { await job.catch(() => { /* generate() already records failure on the brief row */ }); });
+  } catch { /* not in a request-scoped context (e.g. some test harnesses) — job still runs, just without the keep-alive guarantee */ }
 }
 
-async function generate(id: string, profile: GeneratePodcastInput["profile"]) {
+async function generate(id: string, userId: string, profile: GeneratePodcastInput["profile"]) {
   const supabase = getSupabaseAdmin();
   try {
     const openaiApiKey = process.env.OPENAI_API_KEY;
     if (!openaiApiKey) throw new Error("missing_api_key");
 
-    await resetGeneration(id);
+    await resetGeneration(id, userId);
 
     await update(id, "researching", 20, "אוספים נתונים מאומתים");
-    try {
-      await refreshPortfolioKnowledge({
-        supabase,
-        assets: knowledgeAssets(profile),
-        openaiApiKey,
-        textModel: process.env.OPENAI_TEXT_MODEL,
-        embeddingModel: process.env.OPENAI_EMBEDDING_MODEL,
-      });
-    } catch (error) {
-      // A temporary source failure should not discard a previously indexed
-      // knowledge snapshot. Retrieval below still requires stored documents
-      // and fails safely when none exist.
-      console.warn("[knowledge:refresh] using the last indexed snapshot", error);
-    }
-
+    // Deliberately no refreshPortfolioKnowledge() call here: ingestion (real
+    // web searches + embeddings) is expensive and belongs in a separate,
+    // deliberate step (scripts/import-portfolio-knowledge.mjs, or a future
+    // scheduled/manual refresh), not on every single generation. This only
+    // reads the already-indexed knowledge_documents table.
     const windowDays = profile.podcastPlan === "weekly" ? 7 : 1;
     const windowStart = new Date(Date.now() - windowDays * 24 * 3600 * 1000).toISOString();
     const windowEnd = new Date().toISOString();
@@ -194,14 +186,14 @@ async function generate(id: string, profile: GeneratePodcastInput["profile"]) {
   }
 }
 
-export async function getBrief(id: string): Promise<BriefView | null> {
+export async function getBrief(id: string, userId: string): Promise<BriefView | null> {
   const supabase = getSupabaseAdmin();
-  const brief = await supabase.from("briefs").select("*").eq("id", id).maybeSingle();
+  const brief = await supabase.from("briefs").select("*").eq("id", id).eq("user_id", userId).maybeSingle();
   assertSupabase(brief.error, "load brief");
   if (!brief.data) return null;
 
   if (["queued", "researching", "scripting", "synthesizing"].includes(brief.data.status as string) && !activeJobs.has(id)) {
-    loadProfile().then((profile) => startGeneration(id, profile)).catch(() => { /* stays queued; next poll retries */ });
+    loadProfile(userId).then((profile) => startGeneration(id, userId, profile)).catch(() => { /* stays queued; next poll retries */ });
   }
 
   const [chapters, sources] = await Promise.all([

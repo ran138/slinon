@@ -1,0 +1,158 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Notice } from "@/components/notice";
+import { OAuthButtons } from "@/components/auth/oauth-buttons";
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", height: 44, borderRadius: 12, padding: "0 14px", marginTop: 6,
+  background: "#181a26", border: "1px solid #292c3d", color: "#f7f7fb",
+  fontSize: "0.9rem", fontFamily: "Heebo, sans-serif", direction: "ltr", textAlign: "right",
+};
+
+export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") ?? undefined;
+  const oauthError = searchParams.get("error");
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(
+    oauthError ? "ההתחברות עם הספק נכשלה. נסו שוב." : null,
+  );
+  const [checkEmail, setCheckEmail] = useState(false);
+  const [resent, setResent] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (mode === "sign-up" && password !== confirmPassword) {
+      setError("הסיסמאות לא תואמות.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const endpoint = mode === "sign-in" ? "/api/auth/sign-in" : "/api/auth/sign-up";
+      const r = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = (await r.json()) as { ok?: boolean; needsConfirmation?: boolean; error?: string };
+      if (!r.ok) {
+        setError(mode === "sign-in" ? "אימייל או סיסמה שגויים." : "לא הצלחנו ליצור את החשבון. נסו שוב.");
+        return;
+      }
+      if (mode === "sign-up" && data.needsConfirmation) {
+        setCheckEmail(true);
+        return;
+      }
+      router.push(next && next.startsWith("/") ? next : "/vestory_app");
+      router.refresh();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function resendConfirmation() {
+    await fetch("/api/auth/resend-confirmation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    setResent(true);
+  }
+
+  if (checkEmail) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, textAlign: "center" }}>
+        <h2 style={{ fontSize: "1.15rem", fontWeight: 700, color: "#f7f7fb" }}>בדקו את תיבת המייל</h2>
+        <p style={{ fontSize: "0.88rem", color: "#9b9dae", lineHeight: 1.7 }}>
+          שלחנו קישור אימות אל {email}. יש ללחוץ עליו כדי להפעיל את החשבון.
+        </p>
+        <button
+          onClick={() => void resendConfirmation()}
+          disabled={resent}
+          style={{
+            background: "none", border: "1px solid #292c3d", borderRadius: 10, height: 40,
+            color: resent ? "#565968" : "#7b6ff5", fontSize: "0.85rem", fontWeight: 600,
+            cursor: resent ? "default" : "pointer", fontFamily: "Heebo, sans-serif",
+          }}
+        >
+          {resent ? "המייל נשלח שוב" : "לא קיבלתי מייל — שליחה חוזרת"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={(e) => void submit(e)} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <h2 style={{ fontSize: "1.15rem", fontWeight: 700, color: "#f7f7fb", textAlign: "center" }}>
+        {mode === "sign-in" ? "התחברות" : "יצירת חשבון"}
+      </h2>
+
+      {error && <Notice tone="error">{error}</Notice>}
+
+      <label style={{ fontSize: "0.8rem", color: "#9b9dae" }}>
+        אימייל
+        <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+      </label>
+
+      <label style={{ fontSize: "0.8rem", color: "#9b9dae" }}>
+        סיסמה
+        <input
+          type="password" required minLength={8} value={password}
+          autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+          onChange={(e) => setPassword(e.target.value)} style={inputStyle}
+        />
+      </label>
+
+      {mode === "sign-up" && (
+        <label style={{ fontSize: "0.8rem", color: "#9b9dae" }}>
+          אימות סיסמה
+          <input type="password" required minLength={8} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} style={inputStyle} />
+        </label>
+      )}
+
+      {mode === "sign-in" && (
+        <a href="/reset-password" style={{ fontSize: "0.8rem", color: "#7b6ff5", textAlign: "left", textDecoration: "none" }}>
+          שכחתם סיסמה?
+        </a>
+      )}
+
+      <button
+        type="submit"
+        disabled={submitting}
+        style={{
+          height: 46, borderRadius: 12, border: "none", color: "#fff", fontSize: "0.92rem", fontWeight: 700,
+          background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", cursor: submitting ? "default" : "pointer",
+          opacity: submitting ? 0.7 : 1, fontFamily: "Heebo, sans-serif",
+        }}
+      >
+        {submitting ? "רגע…" : mode === "sign-in" ? "התחברות" : "יצירת חשבון"}
+      </button>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0" }}>
+        <div style={{ flex: 1, height: 1, background: "#292c3d" }} />
+        <span style={{ fontSize: "0.75rem", color: "#565968" }}>או</span>
+        <div style={{ flex: 1, height: 1, background: "#292c3d" }} />
+      </div>
+
+      <OAuthButtons next={next} />
+
+      <p style={{ fontSize: "0.82rem", color: "#9b9dae", textAlign: "center", marginTop: 4 }}>
+        {mode === "sign-in" ? (
+          <>אין לכם חשבון? <a href="/signup" style={{ color: "#7b6ff5", textDecoration: "none" }}>יצירת חשבון</a></>
+        ) : (
+          <>יש לכם כבר חשבון? <a href="/login" style={{ color: "#7b6ff5", textDecoration: "none" }}>התחברות</a></>
+        )}
+      </p>
+    </form>
+  );
+}
