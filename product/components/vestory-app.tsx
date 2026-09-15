@@ -176,15 +176,15 @@ function WelcomeScreen({ onNext }: { onNext: () => void }) {
       <div className="absolute pointer-events-none" style={{ width: 380, height: 300, bottom: 60, right: -80, background: "radial-gradient(ellipse, rgba(123,111,245,0.07) 0%, transparent 65%)" }} />
 
       <div className="relative z-10 flex flex-col items-center w-full max-w-[500px] text-center" style={{ gap: "1.5rem" }}>
-        <div className="flex flex-col items-center" style={{ gap: "0.5rem", isolation: "isolate" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/slinon-logo-transparent.png" alt="Slinon" style={{ width: 160, height: "auto", opacity: 1, display: "block" }} />
-        </div>
-
         <div className="flex flex-col items-center" style={{ gap: "0.75rem" }}>
           <h1 style={{ fontSize: "clamp(2.75rem, 7vw, 3.75rem)", fontWeight: 800, letterSpacing: "-0.025em", lineHeight: 1, background: "linear-gradient(145deg, #f0f0f5 20%, #c4bdff 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
             VESTORY
           </h1>
+          <div className="flex items-center justify-center" style={{ gap: "0.55rem", direction: "ltr", isolation: "isolate" }}>
+            <span style={{ color: "#8a8aaa", fontSize: "0.82rem", fontWeight: 500, letterSpacing: "0.03em" }}>by</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/assets/slinon-logo-transparent.png" alt="Slinon" style={{ width: 112, height: "auto", opacity: 1, display: "block" }} />
+          </div>
           <p style={{ fontSize: "1.05rem", fontWeight: 500, lineHeight: 1.5, color: "#c8c8de", maxWidth: 380 }}>
             כל מה שחשוב להשקעות שלך — ב־3-10 דקות
           </p>
@@ -2082,13 +2082,12 @@ export function VestoryApp() {
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
-    const isLocalPreferencesPreview =
-      ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
-      query.get("preview") === "preferences";
+    const isLocalPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    const previewScreen = isLocalPreview ? query.get("preview") : null;
 
-    if (isLocalPreferencesPreview) {
-      setProfile({ ...EMPTY_PROFILE, onboardingComplete: true });
-      setScreen("settings-personalization");
+    if (previewScreen === "preferences" || previewScreen === "welcome") {
+      setProfile({ ...EMPTY_PROFILE, onboardingComplete: previewScreen === "preferences" });
+      setScreen(previewScreen === "preferences" ? "settings-personalization" : "welcome");
       setLoading(false);
       return;
     }
