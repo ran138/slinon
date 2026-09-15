@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Notice } from "@/components/notice";
 
 const inputStyle: React.CSSProperties = {
@@ -11,7 +10,6 @@ const inputStyle: React.CSSProperties = {
 };
 
 export function UpdatePasswordForm() {
-  const router = useRouter();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -35,8 +33,8 @@ export function UpdatePasswordForm() {
         setError("לא הצלחנו לעדכן את הסיסמה. ייתכן שהקישור פג תוקף — בקשו קישור חדש.");
         return;
       }
-      router.push("/vestory_app");
-      router.refresh();
+      // Full navigation, not router.push() — see auth-form.tsx for why (CSP differs by page).
+      window.location.href = "/vestory_app";
     } finally {
       setSubmitting(false);
     }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Notice } from "@/components/notice";
 import { OAuthButtons } from "@/components/auth/oauth-buttons";
 
@@ -12,7 +12,6 @@ const inputStyle: React.CSSProperties = {
 };
 
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? undefined;
   const oauthError = searchParams.get("error");
@@ -53,8 +52,11 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         setCheckEmail(true);
         return;
       }
-      router.push(next && next.startsWith("/") ? next : "/vestory_app");
-      router.refresh();
+      // A full navigation, not router.push() — the destination page (/vestory_app)
+      // has a different CSP (allows PostHog's hosts) than /login. A client-side
+      // soft nav keeps enforcing the CSP from the page that's actually loaded,
+      // so PostHog would silently get blocked until a real document load happens.
+      window.location.href = next && next.startsWith("/") ? next : "/vestory_app";
     } finally {
       setSubmitting(false);
     }

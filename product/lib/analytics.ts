@@ -16,6 +16,10 @@ export function initAnalytics() {
 
   posthog.init(key, {
     api_host: host,
+    // Opts into PostHog's current recommended baseline behavior (capture,
+    // autocapture, etc.) — without this, newer SDK versions may not
+    // actually start capturing anything even with an otherwise-valid config.
+    defaults: "2026-05-30",
     // Only creates a billable "person" profile once we've identified a
     // real logged-in user (see identifyUser below) — every /vestory_app
     // visitor is already authenticated by the time this runs (proxy.ts
