@@ -12,7 +12,7 @@ export async function GET() {
 
   const supabase = getSupabaseAdmin();
   const [settings, assets, interests] = await Promise.all([
-    supabase.from("settings").select("target_minutes,onboarding_complete,podcast_plan,schedule_time,schedule_day,schedule_timezone,next_run_at,last_scheduled_at").eq("user_id", user.id).maybeSingle(),
+    supabase.from("settings").select("target_minutes,onboarding_complete,podcast_plan,schedule_time,schedule_day,schedule_timezone,next_run_at,last_scheduled_at,notify_email").eq("user_id", user.id).maybeSingle(),
     supabase.from("assets").select("id,kind,name,symbol,asset_class,exchange,quantity,average_cost,currency,created_at,updated_at").eq("user_id", user.id).order("created_at"),
     supabase.from("interests").select("id,label,custom,created_at").eq("user_id", user.id).order("created_at"),
   ]);
@@ -27,6 +27,7 @@ export async function GET() {
     scheduleTime: String(settings.data?.schedule_time ?? "07:00").slice(0, 5),
     scheduleDay: settings.data?.schedule_day ?? null,
     scheduleTimezone: settings.data?.schedule_timezone ?? "Asia/Jerusalem",
+    notifyByEmail: settings.data?.notify_email ?? true,
     nextRunAt: settings.data?.next_run_at ?? null,
     lastScheduledAt: settings.data?.last_scheduled_at ?? null,
     onboardingComplete: settings.data?.onboarding_complete ?? false,
@@ -101,6 +102,7 @@ export async function PUT(request: Request) {
     schedule_time: value.scheduleTime,
     schedule_day: normalizedDay,
     schedule_timezone: value.scheduleTimezone,
+    notify_email: value.notifyByEmail,
     next_run_at: nextRunAt,
     target_minutes: targetMinutes,
   }).eq("user_id", user.id);
