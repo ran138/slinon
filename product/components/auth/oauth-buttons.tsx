@@ -17,17 +17,20 @@ function GitHubIcon() {
   );
 }
 
-export function OAuthButtons({ next }: { next?: string }) {
+export function OAuthButtons({ next, disabled }: { next?: string; disabled?: boolean }) {
   const suffix = next ? `?next=${encodeURIComponent(next)}` : "";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <a
         href={`/api/auth/oauth/google${suffix}`}
+        aria-disabled={disabled}
+        onClick={(e) => { if (disabled) e.preventDefault(); }}
         style={{
           display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
           height: 44, borderRadius: 12, background: "#181a26", border: "1px solid #292c3d",
           color: "#f7f7fb", fontSize: "0.88rem", fontWeight: 600, textDecoration: "none",
-          fontFamily: "Heebo, sans-serif",
+          fontFamily: "Heebo, sans-serif", opacity: disabled ? 0.45 : 1,
+          cursor: disabled ? "not-allowed" : "pointer",
         }}
       >
         <GoogleIcon />
@@ -35,11 +38,14 @@ export function OAuthButtons({ next }: { next?: string }) {
       </a>
       <a
         href={`/api/auth/oauth/github${suffix}`}
+        aria-disabled={disabled}
+        onClick={(e) => { if (disabled) e.preventDefault(); }}
         style={{
           display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
           height: 44, borderRadius: 12, background: "#181a26", border: "1px solid #292c3d",
           color: "#f7f7fb", fontSize: "0.88rem", fontWeight: 600, textDecoration: "none",
-          fontFamily: "Heebo, sans-serif",
+          fontFamily: "Heebo, sans-serif", opacity: disabled ? 0.45 : 1,
+          cursor: disabled ? "not-allowed" : "pointer",
         }}
       >
         <GitHubIcon />
