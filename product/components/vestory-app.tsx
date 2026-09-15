@@ -74,12 +74,11 @@ function TopBar({ onNav, screen, onSignOut }: { onNav: (s: Screen) => void; scre
   if (!showNav) return null;
   return (
     <header className="sticky top-0 z-50" style={{ borderBottom: "1px solid #292c3d", background: "rgba(9,10,17,0.92)", backdropFilter: "blur(18px)" }}>
-      <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
+      <div className="max-w-5xl mx-auto px-6 h-14 relative flex items-center justify-between">
         <button onClick={() => onNav("dashboard")} className="flex items-center gap-2.5 group" style={{ background: "none", border: "none", cursor: "pointer" }}>
-          <Logo size="sm" />
           <span className="font-bold text-sm" style={{ color: "#f7f7fb" }}>VESTORY</span>
         </button>
-        <nav className="flex items-center gap-1">
+        <nav className="absolute flex items-center gap-1" style={{ left: "50%", transform: "translateX(-50%)" }}>
           {[
             { id: "dashboard" as Screen, label: "היום" },
             { id: "settings-portfolio" as Screen, label: "תיק" },
@@ -1228,8 +1227,8 @@ function DashboardScreen({ holdings, brief, onNav, onPlay, onGenerate, generatin
                           <span className="font-bold" style={{ fontSize: "0.65rem", color: "#9d94f7" }}>{h.ticker.replace(/[^A-Z]/g, "").slice(0, 2)}</span>
                         </div>
                         <div>
-                          <p className="text-xs font-semibold" style={{ color: "#f7f7fb", direction: "ltr" }}>{h.ticker}</p>
-                          {h.name && <p style={{ fontSize: "0.68rem", color: "#565968" }}>{h.name}</p>}
+                          <p className="text-xs font-semibold" style={{ color: "#f7f7fb", direction: "ltr", textAlign: "right" }}>{h.ticker}</p>
+                          {h.name && <p style={{ fontSize: "0.68rem", color: "#565968", textAlign: "right" }}>{h.name}</p>}
                         </div>
                       </div>
                     </div>
@@ -1385,7 +1384,7 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
               </div>
 
               <div className="flex items-center justify-between">
-                <button onClick={() => setSpeed(speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1)} className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition-colors hover:bg-white/5" style={{ color: "#9b9dae", border: "1px solid #292c3d", background: "none", cursor: "pointer" }}>{speed}×</button>
+                <button onClick={() => setSpeed(speed === 1 ? 1.5 : speed === 1.5 ? 2 : speed === 2 ? 0.5 : 1)} className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition-colors hover:bg-white/5" style={{ color: "#9b9dae", border: "1px solid #292c3d", background: "none", cursor: "pointer" }}>{speed}×</button>
 
                 <div className="flex items-center gap-4">
                   <button onClick={() => activeChapter > 0 && seekToChapter(activeChapter - 1)} disabled={activeChapter === 0} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors" style={{ color: "#9b9dae", background: "none", border: "none", cursor: activeChapter === 0 ? "not-allowed" : "pointer", opacity: activeChapter === 0 ? 0.35 : 1 }}>
@@ -1432,7 +1431,7 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-right truncate" style={{ color: isActive ? "#7b6ff5" : isDone ? "#9b9dae" : "#f7f7fb" }}>{ch.title}</p>
-                      <p className="text-xs font-mono mt-0.5" style={{ color: "#565968" }}>{fmtMs(ch.durationMs)}</p>
+                      <p className="text-xs font-mono mt-0.5" style={{ color: "#565968" }}>{fmtMs(ch.startMs)}</p>
                     </div>
                   </button>
                 );
@@ -1588,8 +1587,8 @@ function PortfolioSettingsScreen({ holdings, onSave }: { holdings: Holding[]; on
                     <span className="text-xs font-bold" style={{ color: "#9d94f7" }}>{h.ticker.replace(/[^A-Z]/g, "").slice(0, 2)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold" style={{ color: "#f7f7fb", direction: "ltr" }}>{h.ticker}</p>
-                    {h.name && <p className="text-xs mt-0.5" style={{ color: "#565968" }}>{h.name}</p>}
+                    <p className="text-sm font-semibold" style={{ color: "#f7f7fb", direction: "ltr", textAlign: "right" }}>{h.ticker}</p>
+                    {h.name && <p className="text-xs mt-0.5" style={{ color: "#565968", textAlign: "right" }}>{h.name}</p>}
                   </div>
                   <button onClick={() => removeHolding(h.id)} className="opacity-30 hover:opacity-70 transition-opacity" style={{ color: "#f87171", background: "none", border: "none", cursor: "pointer" }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>

@@ -20,6 +20,10 @@ export function LegalPage({ title, updated, children }: { title: string; updated
         <div className="legal-content">{children}</div>
       </main>
 
+      <footer className="flex items-center justify-center" style={{ padding: "24px 16px 32px" }}>
+        <Logo size="sm" />
+      </footer>
+
       <style>{`
         .legal-content h2 {
           font-size: 1.15rem; font-weight: 700; color: #f7f7fb;
