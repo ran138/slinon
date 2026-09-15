@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { assertSupabase, getSupabaseAdmin } from "@/db";
 import { profileUpdateSchema } from "@/lib/domain";
+import { computeNextRunAt, targetMinutesForPlan } from "@/lib/schedule";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   const supabase = getSupabaseAdmin();
   const [settings, assets, interests] = await Promise.all([
-    supabase.from("settings").select("target_minutes,onboarding_complete").eq("id", 1).maybeSingle(),
+    supabase.from("settings").select("target_minutes,onboarding_complete,podcast_plan,schedule_time,schedule_day,schedule_timezone,next_run_at,last_scheduled_at").eq("id", 1).maybeSingle(),
     supabase.from("assets").select("id,kind,name,symbol,asset_class,exchange,quantity,average_cost,currency,created_at,updated_at").order("created_at"),
     supabase.from("interests").select("id,label,custom,created_at").order("created_at"),
   ]);
@@ -17,6 +18,12 @@ export async function GET() {
 
   return NextResponse.json({
     targetMinutes: settings.data?.target_minutes ?? 7,
+    podcastPlan: settings.data?.podcast_plan ?? "daily",
+    scheduleTime: String(settings.data?.schedule_time ?? "07:00").slice(0, 5),
+    scheduleDay: settings.data?.schedule_day ?? null,
+    scheduleTimezone: settings.data?.schedule_timezone ?? "Asia/Jerusalem",
+    nextRunAt: settings.data?.next_run_at ?? null,
+    lastScheduledAt: settings.data?.last_scheduled_at ?? null,
     onboardingComplete: settings.data?.onboarding_complete ?? false,
     assets: (assets.data ?? []).map((item) => ({
       id: item.id,
@@ -44,7 +51,29 @@ export async function PUT(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "invalid_profile" }, { status: 400 });
 
   const value = parsed.data;
-  const { error } = await getSupabaseAdmin().rpc("replace_profile", {
+  const supabase = getSupabaseAdmin();
+  const current = await supabase.from("settings")
+    .select("podcast_plan,schedule_time,schedule_day,schedule_timezone,next_run_at")
+    .eq("id", 1).maybeSingle();
+  assertSupabase(current.error, "load current podcast schedule");
+
+  const normalizedDay = value.podcastPlan === "weekly" ? value.scheduleDay : null;
+  const scheduleChanged = !current.data
+    || current.data.podcast_plan !== value.podcastPlan
+    || String(current.data.schedule_time).slice(0, 5) !== value.scheduleTime
+    || current.data.schedule_day !== normalizedDay
+    || current.data.schedule_timezone !== value.scheduleTimezone;
+  const nextRunAt = scheduleChanged || !current.data?.next_run_at
+    ? computeNextRunAt({
+      podcastPlan: value.podcastPlan,
+      scheduleTime: value.scheduleTime,
+      scheduleDay: normalizedDay,
+      scheduleTimezone: value.scheduleTimezone,
+    })
+    : current.data.next_run_at;
+  const targetMinutes = targetMinutesForPlan(value.podcastPlan);
+
+  const { error } = await supabase.rpc("replace_profile", {
     p_assets: value.assets.map((item) => ({
       id: item.id ?? crypto.randomUUID(), kind: item.kind, name: item.name, symbol: item.symbol,
       asset_class: item.assetClass ?? null, exchange: item.exchange ?? null,
@@ -53,9 +82,19 @@ export async function PUT(request: Request) {
     p_interests: value.interests.map((item) => ({
       id: crypto.randomUUID(), label: item.label, custom: item.custom ?? false,
     })),
-    p_target_minutes: value.targetMinutes,
+    p_target_minutes: targetMinutes,
     p_onboarding_complete: value.onboardingComplete,
   });
   assertSupabase(error, "replace profile");
+
+  const schedule = await supabase.from("settings").update({
+    podcast_plan: value.podcastPlan,
+    schedule_time: value.scheduleTime,
+    schedule_day: normalizedDay,
+    schedule_timezone: value.scheduleTimezone,
+    next_run_at: nextRunAt,
+    target_minutes: targetMinutes,
+  }).eq("id", 1);
+  assertSupabase(schedule.error, "save podcast schedule");
   return GET();
 }

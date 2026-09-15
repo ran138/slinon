@@ -52,18 +52,13 @@ function toCollectedItem(document: KnowledgeDocument, topics: TopicQuery[]): Col
  * Replaces the earlier version that read the always-empty `collected_items`
  * table — this is real, populated data with working retrieval.
  *
- * windowStart/windowEnd are accepted for interface compatibility with the
- * original design but not applied as a hard filter here: semantic search
- * ranks by relevance, not recency, and the underlying RPC doesn't expose a
- * date-range parameter. Ingestion (refreshPortfolioKnowledge, called from
- * lib/briefs.ts before this runs) keeps the indexed set current instead.
+ * The vector RPC ranks a broader candidate set by relevance. This adapter
+ * then enforces the requested daily or weekly time window before scripting.
  */
 export async function fetchCollectedItems(
   topics: TopicQuery[],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for interface compatibility with generate.ts's call site, see comment above
-  _windowStart: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for interface compatibility with generate.ts's call site, see comment above
-  _windowEnd: string,
+  windowStart: string,
+  windowEnd: string,
 ): Promise<CollectedItem[]> {
   if (!topics.length || !process.env.OPENAI_API_KEY) return [];
 
@@ -80,8 +75,16 @@ export async function fetchCollectedItems(
     openaiApiKey: process.env.OPENAI_API_KEY,
     query,
     symbols,
-    limit: 18,
+    limit: 50,
   });
 
-  return documents.map((document) => toCollectedItem(document, topics));
+  const start = Date.parse(windowStart);
+  const end = Date.parse(windowEnd);
+  return documents
+    .filter((document) => {
+      const occurredAt = Date.parse(document.published_at ?? document.accessed_at);
+      return Number.isFinite(occurredAt) && occurredAt >= start && occurredAt <= end;
+    })
+    .slice(0, 18)
+    .map((document) => toCollectedItem(document, topics));
 }

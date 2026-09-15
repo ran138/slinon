@@ -70,7 +70,7 @@ function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   return (
     <div style={{ isolation: "isolate", display: "flex", alignItems: "center", flexShrink: 0 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/home/assets/slinon-logo.png" alt="slinon" style={{ width: w, height: "auto", mixBlendMode: "screen", opacity: 0.92 }} />
+      <img src="/assets/slinon-logo-transparent.png" alt="slinon" style={{ width: w, height: "auto", opacity: 1 }} />
     </div>
   );
 }
@@ -178,7 +178,7 @@ function WelcomeScreen({ onNext }: { onNext: () => void }) {
       <div className="relative z-10 flex flex-col items-center w-full max-w-[500px] text-center" style={{ gap: "1.5rem" }}>
         <div className="flex flex-col items-center" style={{ gap: "0.5rem", isolation: "isolate" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/home/assets/slinon-logo.png" alt="Slinon" style={{ width: 160, height: "auto", mixBlendMode: "screen", opacity: 0.97, display: "block" }} />
+          <img src="/assets/slinon-logo-transparent.png" alt="Slinon" style={{ width: 160, height: "auto", opacity: 1, display: "block" }} />
         </div>
 
         <div className="flex flex-col items-center" style={{ gap: "0.75rem" }}>
@@ -1714,9 +1714,13 @@ function PortfolioSettingsScreen({ holdings, onSave }: { holdings: Holding[]; on
 
 // ─── PersonalizationScreen ────────────────────────────────────────────────────
 
-function PersonalizationScreen({ watchlist, targetMinutes, interests, onSave }: {
-  watchlist: WatchItem[]; targetMinutes: 5 | 7 | 10; interests: string[];
-  onSave: (data: { watchlist: WatchItem[]; targetMinutes: 5 | 7 | 10; interests: string[] }) => Promise<void>;
+function PersonalizationScreen({ watchlist, podcastPlan, scheduleTime, scheduleDay, nextRunAt, interests, onSave }: {
+  watchlist: WatchItem[]; podcastPlan: "daily" | "weekly"; scheduleTime: string;
+  scheduleDay: number | null; nextRunAt: string | null; interests: string[];
+  onSave: (data: {
+    watchlist: WatchItem[]; podcastPlan: "daily" | "weekly";
+    scheduleTime: string; scheduleDay: number | null; interests: string[];
+  }) => Promise<void>;
 }) {
   const predefinedIds = interests.filter((id) => INTERESTS.some((i) => i.id === id));
   const initialCustom = interests.filter((id) => !INTERESTS.some((i) => i.id === id));
@@ -1724,7 +1728,11 @@ function PersonalizationScreen({ watchlist, targetMinutes, interests, onSave }: 
   const [customInterests, setCustomInterests] = useState<string[]>(initialCustom);
   const [interestInput, setInterestInput] = useState("");
   const [interestFocused, setInterestFocused] = useState(false);
-  const [briefDuration, setBriefDuration] = useState<5 | 7 | 10>(targetMinutes);
+  const [selectedPlan, setSelectedPlan] = useState<"daily" | "weekly">(podcastPlan);
+  const [selectedTime, setSelectedTime] = useState(scheduleTime);
+  const [selectedDay, setSelectedDay] = useState(
+    scheduleDay !== null && scheduleDay >= 1 && scheduleDay <= 5 ? scheduleDay : 1,
+  );
   const [watchInput, setWatchInput] = useState("");
   const [watchFocused, setWatchFocused] = useState(false);
   const [rows, setRows] = useState<WatchItem[]>(watchlist);
@@ -1748,7 +1756,13 @@ function PersonalizationScreen({ watchlist, targetMinutes, interests, onSave }: 
   async function save() {
     setSaved("saving");
     try {
-      await onSave({ watchlist: rows, targetMinutes: briefDuration, interests: [...selectedInterests, ...customInterests] });
+      await onSave({
+        watchlist: rows,
+        podcastPlan: selectedPlan,
+        scheduleTime: selectedTime,
+        scheduleDay: selectedPlan === "weekly" ? selectedDay : null,
+        interests: [...selectedInterests, ...customInterests],
+      });
       setSaved("saved");
       setTimeout(() => setSaved("idle"), 2000);
     } catch { setSaved("error"); }
@@ -1764,15 +1778,58 @@ function PersonalizationScreen({ watchlist, targetMinutes, interests, onSave }: 
 
         <div className="space-y-6">
           <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
-            <h3 className="text-sm font-semibold mb-4" style={{ color: "#f7f7fb" }}>אורך הפודקאסט</h3>
-            <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
-              {[5, 7, 10].map((m) => (
-                <button key={m} onClick={() => setBriefDuration(m as 5 | 7 | 10)} className="h-10 rounded-lg text-sm font-semibold transition-all" style={{
-                  background: briefDuration === m ? "linear-gradient(130deg, #7b6ff5, #5b8af0)" : "#181a26",
-                  color: briefDuration === m ? "#fff" : "#9b9dae", border: "1px solid #292c3d", cursor: "pointer",
-                }}>כ־{m} דקות</button>
-              ))}
+            <h3 className="text-sm font-semibold mb-1" style={{ color: "#f7f7fb" }}>תוכנית הפודקאסט</h3>
+            <p className="text-xs mb-4" style={{ color: "#565968" }}>בחרו באיזו תדירות ומתי הפודקאסט יהיה מוכן.</p>
+
+            <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+              {[
+                { id: "daily" as const, title: "תוכנית יומית", detail: "כ־5 דקות, בימים שני עד שישי" },
+                { id: "weekly" as const, title: "תוכנית שבועית", detail: "כ־10 דקות פעם בשבוע" },
+              ].map((plan) => {
+                const selected = selectedPlan === plan.id;
+                return (
+                  <button key={plan.id} onClick={() => setSelectedPlan(plan.id)} className="rounded-xl text-right transition-all" style={{
+                    minHeight: 70, padding: "12px 14px",
+                    background: selected ? "linear-gradient(130deg, rgba(123,111,245,0.28), rgba(91,138,240,0.22))" : "#181a26",
+                    color: selected ? "#fff" : "#9b9dae",
+                    border: `1px solid ${selected ? "rgba(123,111,245,0.65)" : "#292c3d"}`,
+                    cursor: "pointer",
+                  }}>
+                    <span className="block text-sm font-semibold">{plan.title}</span>
+                    <span className="block text-xs mt-1" style={{ color: selected ? "#c9c5ff" : "#565968" }}>{plan.detail}</span>
+                  </button>
+                );
+              })}
             </div>
+
+            <div className="grid gap-3 mt-4" style={{ gridTemplateColumns: selectedPlan === "weekly" ? "1fr 1fr" : "1fr" }}>
+              {selectedPlan === "weekly" && (
+                <label className="text-xs" style={{ color: "#9b9dae" }}>
+                  יום בשבוע
+                  <select value={selectedDay} onChange={(event) => setSelectedDay(Number(event.target.value))} className="w-full mt-2 h-10 rounded-lg px-3" style={{ background: "#181a26", color: "#f7f7fb", border: "1px solid #292c3d", direction: "rtl" }}>
+                    {[
+                      { value: 1, label: "יום שני" },
+                      { value: 2, label: "יום שלישי" },
+                      { value: 3, label: "יום רביעי" },
+                      { value: 4, label: "יום חמישי" },
+                      { value: 5, label: "יום שישי" },
+                    ].map(({ value, label }) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="text-xs" style={{ color: "#9b9dae" }}>
+                שעה שבה הפודקאסט יהיה מוכן
+                <input type="time" value={selectedTime} onChange={(event) => setSelectedTime(event.target.value)} className="w-full mt-2 h-10 rounded-lg px-3" style={{ background: "#181a26", color: "#f7f7fb", border: "1px solid #292c3d", direction: "ltr" }} />
+              </label>
+            </div>
+
+            <p className="text-xs mt-3" style={{ color: "#565968" }}>
+              {selectedPlan === "daily" ? "הפודקאסט יוכן בימים שני עד שישי בלבד · " : ""}
+              אזור זמן: ישראל (Asia/Jerusalem)
+              {nextRunAt ? ` · הפודקאסט הבא מתוכנן להיות מוכן: ${new Date(nextRunAt).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
+            </p>
           </div>
 
           <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
@@ -1945,8 +2002,19 @@ function HistoryScreen({ briefs, onOpen }: { briefs: BriefView[]; onOpen: (id: s
 
 // ─── App shell ────────────────────────────────────────────────────────────────
 
-type Profile = ProfileUpdate;
-const EMPTY_PROFILE: Profile = { targetMinutes: 7, onboardingComplete: false, assets: [], interests: [] };
+type Profile = ProfileUpdate & { nextRunAt: string | null; lastScheduledAt: string | null };
+const EMPTY_PROFILE: Profile = {
+  targetMinutes: 5,
+  podcastPlan: "daily",
+  scheduleTime: "07:00",
+  scheduleDay: null,
+  scheduleTimezone: "Asia/Jerusalem",
+  nextRunAt: null,
+  lastScheduledAt: null,
+  onboardingComplete: false,
+  assets: [],
+  interests: [],
+};
 
 function assetToHolding(a: Profile["assets"][number]): Holding {
   return { id: a.id ?? a.symbol, ticker: a.symbol, name: a.name, quantity: a.quantity ?? "", avgCost: a.averageCost ?? "" };
@@ -1966,6 +2034,18 @@ export function VestoryApp() {
   const [portfolioDraft, setPortfolioDraft] = useState<PortfolioDraft>({ freeText: "", pickedAssets: [], confirmedScreenshot: false, detectedAssets: [] });
 
   useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const isLocalPreferencesPreview =
+      ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+      query.get("preview") === "preferences";
+
+    if (isLocalPreferencesPreview) {
+      setProfile({ ...EMPTY_PROFILE, onboardingComplete: true });
+      setScreen("settings-personalization");
+      setLoading(false);
+      return;
+    }
+
     let ignore = false;
     Promise.all([
       fetch("/api/profile").then((r) => r.json() as Promise<Profile>),
@@ -2039,11 +2119,20 @@ export function VestoryApp() {
     await persistProfile({ ...profile, assets: [...holdingAssets, ...watchlistAssets] });
   }
 
-  async function handleSavePersonalization(data: { watchlist: WatchItem[]; targetMinutes: 5 | 7 | 10; interests: string[] }) {
+  async function handleSavePersonalization(data: {
+    watchlist: WatchItem[]; podcastPlan: "daily" | "weekly";
+    scheduleTime: string; scheduleDay: number | null; interests: string[];
+  }) {
     const holdingAssets = profile.assets.filter((a) => a.kind === "holding");
     const watchAssets: Profile["assets"] = data.watchlist.map((w) => ({ kind: "watchlist", name: w.name, symbol: w.ticker }));
     await persistProfile({
-      ...profile, targetMinutes: data.targetMinutes, assets: [...holdingAssets, ...watchAssets],
+      ...profile,
+      targetMinutes: data.podcastPlan === "daily" ? 5 : 10,
+      podcastPlan: data.podcastPlan,
+      scheduleTime: data.scheduleTime,
+      scheduleDay: data.scheduleDay,
+      scheduleTimezone: "Asia/Jerusalem",
+      assets: [...holdingAssets, ...watchAssets],
       interests: data.interests.map((label) => ({ label, custom: !INTERESTS.some((i) => i.id === label) })),
     });
   }
@@ -2096,7 +2185,15 @@ export function VestoryApp() {
       {screen === "sources" && <SourcesScreen brief={activeBrief} onNav={goTo} />}
       {screen === "settings-portfolio" && <PortfolioSettingsScreen holdings={holdings} onSave={handleSaveHoldings} />}
       {screen === "settings-personalization" && (
-        <PersonalizationScreen watchlist={watchlist} targetMinutes={profile.targetMinutes} interests={profile.interests.map((i) => i.label)} onSave={handleSavePersonalization} />
+        <PersonalizationScreen
+          watchlist={watchlist}
+          podcastPlan={profile.podcastPlan}
+          scheduleTime={profile.scheduleTime}
+          scheduleDay={profile.scheduleDay}
+          nextRunAt={profile.nextRunAt}
+          interests={profile.interests.map((i) => i.label)}
+          onSave={handleSavePersonalization}
+        />
       )}
       {screen === "history" && <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} />}
     </div>

@@ -14,9 +14,17 @@ export const assetInputSchema = z.object({
 
 export const profileUpdateSchema = z.object({
   targetMinutes: z.union([z.literal(5), z.literal(7), z.literal(10)]),
+  podcastPlan: z.enum(["daily", "weekly"]),
+  scheduleTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  scheduleDay: z.number().int().min(1).max(5).nullable(),
+  scheduleTimezone: z.literal("Asia/Jerusalem"),
   onboardingComplete: z.boolean(),
   assets: z.array(assetInputSchema).max(50),
   interests: z.array(z.object({ label: z.string().trim().min(1).max(80), custom: z.boolean().optional() })).min(1).max(30),
+}).superRefine((value, context) => {
+  if (value.podcastPlan === "weekly" && value.scheduleDay === null) {
+    context.addIssue({ code: "custom", path: ["scheduleDay"], message: "Weekly plans require a day" });
+  }
 });
 
 export type ProfileUpdate = z.infer<typeof profileUpdateSchema>;

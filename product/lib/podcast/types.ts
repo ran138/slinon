@@ -15,6 +15,7 @@ export interface CollectedItem {
 }
 
 export interface ProfileInput {
+  podcastPlan: "daily" | "weekly";
   holdings: Array<{ name: string; symbol: string }>;
   watchlist: Array<{ name: string; symbol: string }>;
   interests: Array<{ label: string }>;

@@ -38,7 +38,7 @@ function canonicalReason(
 async function loadProfile(): Promise<GeneratePodcastInput["profile"]> {
   const supabase = getSupabaseAdmin();
   const [settings, assets, interests] = await Promise.all([
-    supabase.from("settings").select("target_minutes").eq("id", 1).maybeSingle(),
+    supabase.from("settings").select("target_minutes,podcast_plan").eq("id", 1).maybeSingle(),
     supabase.from("assets").select("kind,name,symbol"),
     supabase.from("interests").select("label"),
   ]);
@@ -48,6 +48,7 @@ async function loadProfile(): Promise<GeneratePodcastInput["profile"]> {
 
   const rows = (assets.data ?? []) as Array<{ kind: string; name: string; symbol: string }>;
   return {
+    podcastPlan: settings.data?.podcast_plan === "weekly" ? "weekly" : "daily",
     holdings: rows.filter((a) => a.kind === "holding").map(({ name, symbol }) => ({ name, symbol })),
     watchlist: rows.filter((a) => a.kind === "watchlist").map(({ name, symbol }) => ({ name, symbol })),
     interests: ((interests.data ?? []) as Array<{ label: string }>).map(({ label }) => ({ label })),
@@ -142,7 +143,8 @@ async function generate(id: string, profile: GeneratePodcastInput["profile"]) {
       console.warn("[knowledge:refresh] using the last indexed snapshot", error);
     }
 
-    const windowStart = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const windowDays = profile.podcastPlan === "weekly" ? 7 : 1;
+    const windowStart = new Date(Date.now() - windowDays * 24 * 3600 * 1000).toISOString();
     const windowEnd = new Date().toISOString();
     const input: GeneratePodcastInput = { profile, windowStart, windowEnd };
 
