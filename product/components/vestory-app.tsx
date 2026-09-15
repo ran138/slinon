@@ -1112,8 +1112,8 @@ const WAVEFORM_HEIGHTS = Array.from({ length: 60 }, (_, i) => 20 + Math.sin(i * 
 function greetingForIsraelTime(): string {
   const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", hour: "numeric", hour12: false }).format(new Date()));
   if (hour >= 5 && hour < 12) return "בוקר טוב ☀️";
-  if (hour >= 12 && hour < 17) return "צהריים טובים 🌤️";
-  if (hour >= 17 && hour < 21) return "ערב טוב 🌆";
+  if (hour >= 12 && hour < 17) return "צהריים טובים 🌞";
+  if (hour >= 17 && hour < 21) return "ערב טוב 🕯️";
   return "לילה טוב 🌙";
 }
 
