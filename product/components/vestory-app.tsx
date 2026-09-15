@@ -1931,7 +1931,7 @@ function weekBucket(d: Date) {
   return d.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
 }
 
-function HistoryScreen({ briefs, onOpen }: { briefs: BriefView[]; onOpen: (id: string) => void }) {
+function HistoryScreen({ briefs, onOpen, onPlay }: { briefs: BriefView[]; onOpen: (id: string) => void; onPlay: (id: string) => void }) {
   const groups: { label: string; items: BriefView[] }[] = [];
   for (const b of briefs) {
     const label = weekBucket(new Date(b.createdAt));
@@ -1961,7 +1961,7 @@ function HistoryScreen({ briefs, onOpen }: { briefs: BriefView[]; onOpen: (id: s
                     return (
                       <div key={b.id} className="rounded-2xl overflow-hidden transition-all" style={{ background: "linear-gradient(155deg, rgba(22,22,34,0.98) 0%, rgba(16,16,28,0.99) 100%)", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 0 0 1px rgba(255,255,255,0.02) inset, 0 2px 12px rgba(0,0,0,0.3)" }}>
                         <div className="flex items-center gap-4 px-5 py-4" style={{ direction: "rtl" }}>
-                          <button onClick={() => onOpen(b.id)} className="flex-shrink-0 transition-all hover:scale-105 active:scale-95" style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(123,111,245,0.13)", border: "1px solid rgba(123,111,245,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                          <button onClick={() => onPlay(b.id)} className="flex-shrink-0 transition-all hover:scale-105 active:scale-95" style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(123,111,245,0.13)", border: "1px solid rgba(123,111,245,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="#9d94f7" stroke="none"><polygon points="6 3 20 12 6 21 6 3" /></svg>
                           </button>
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -2029,7 +2029,11 @@ export function VestoryApp() {
 
   function goTo(s: Screen) { setScreen(s); window.scrollTo(0, 0); }
 
-  function playBrief() { setPlayOnEnter(true); goTo("player"); }
+  function playBrief(id?: string) {
+    if (id) setActiveBriefId(id);
+    setPlayOnEnter(true);
+    goTo("player");
+  }
 
   async function persistProfile(next: Profile) {
     const r = await fetch("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
@@ -2149,7 +2153,9 @@ export function VestoryApp() {
       {screen === "settings-personalization" && (
         <PersonalizationScreen watchlist={watchlist} targetMinutes={profile.targetMinutes} interests={profile.interests.map((i) => i.label)} onSave={handleSavePersonalization} />
       )}
-      {screen === "history" && <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} />}
+      {screen === "history" && (
+        <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} onPlay={(id) => playBrief(id)} />
+      )}
     </div>
   );
 }
