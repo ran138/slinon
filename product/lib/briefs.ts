@@ -72,6 +72,36 @@ async function notifyBriefReady(briefId: string, userId: string, title: string) 
   await sendPodcastReadyEmail({ to: profile.data.email as string, briefId, title });
 }
 
+/**
+ * Periodic sweep for scheduler-triggered briefs whose generation finished
+ * before their target notify_at (the common case — generation is usually
+ * done in 1.5-4.5 min, well inside the lead time before the user's chosen
+ * delivery time). Called from the scheduler tick route alongside the
+ * due-generation check. Interactive "generate now" briefs never have
+ * notify_at set, so they're untouched here — they already notified
+ * immediately on completion inside generate().
+ */
+export async function sendDueNotifications(): Promise<number> {
+  const supabase = getSupabaseAdmin();
+  const due = await supabase
+    .from("briefs")
+    .select("id,user_id,title")
+    .eq("status", "completed")
+    .is("notified_at", null)
+    .not("notify_at", "is", null)
+    .lte("notify_at", new Date().toISOString());
+  assertSupabase(due.error, "find briefs due for notification");
+
+  let sent = 0;
+  for (const row of due.data ?? []) {
+    await notifyBriefReady(row.id as string, row.user_id as string, (row.title as string | null) ?? "הפודקאסט שלך");
+    const marked = await supabase.from("briefs").update({ notified_at: new Date().toISOString() }).eq("id", row.id);
+    assertSupabase(marked.error, "mark brief notified");
+    sent++;
+  }
+  return sent;
+}
+
 async function resetGeneration(id: string, userId: string) {
   const supabase = getSupabaseAdmin();
   const storage = supabase.storage.from(AUDIO_BUCKET);
@@ -86,7 +116,15 @@ async function resetGeneration(id: string, userId: string) {
   assertSupabase(reset.error, "reset brief generation");
 }
 
-export async function createBrief(userId: string): Promise<string> {
+/**
+ * notifyAt: target time to send the "ready" email, for scheduler-triggered
+ * briefs only — generation starts a lead time before the user's chosen
+ * delivery time (see scheduler/tick), but the email should land close to
+ * that time, not whenever generation happens to finish (usually earlier).
+ * Omitted (null) for interactive "generate now" calls, which notify
+ * immediately on completion as before.
+ */
+export async function createBrief(userId: string, notifyAt: string | null = null): Promise<string> {
   const supabase = getSupabaseAdmin();
   const profile = await loadProfile(userId);
   if (!profile.holdings.length && !profile.watchlist.length && !profile.interests.length) throw new Error("profile_incomplete");
@@ -101,7 +139,7 @@ export async function createBrief(userId: string): Promise<string> {
     .maybeSingle();
   assertSupabase(active.error, "find active brief");
   if (active.data) {
-    startGeneration(active.data.id as string, userId, profile);
+    startGeneration(active.data.id as string, userId, profile, notifyAt);
     return active.data.id as string;
   }
 
@@ -109,17 +147,17 @@ export async function createBrief(userId: string): Promise<string> {
   const now = new Date().toISOString();
   const created = await supabase.from("briefs").insert({
     id, user_id: userId, status: "queued", progress: 4, stage_label: "הבריף נכנס לתור",
-    profile_snapshot: profile, target_minutes: profile.targetMinutes, created_at: now,
+    profile_snapshot: profile, target_minutes: profile.targetMinutes, created_at: now, notify_at: notifyAt,
   });
   assertSupabase(created.error, "create brief");
 
-  startGeneration(id, userId, profile);
+  startGeneration(id, userId, profile, notifyAt);
   return id;
 }
 
-function startGeneration(id: string, userId: string, profile: GeneratePodcastInput["profile"]) {
+function startGeneration(id: string, userId: string, profile: GeneratePodcastInput["profile"], notifyAt: string | null) {
   if (activeJobs.has(id)) return;
-  const job = generate(id, userId, profile);
+  const job = generate(id, userId, profile, notifyAt);
   activeJobs.set(id, job);
   void job.finally(() => { if (activeJobs.get(id) === job) activeJobs.delete(id); });
   // Vercel may freeze the serverless function once its HTTP response is
@@ -132,7 +170,7 @@ function startGeneration(id: string, userId: string, profile: GeneratePodcastInp
   } catch { /* not in a request-scoped context (e.g. some test harnesses) — job still runs, just without the keep-alive guarantee */ }
 }
 
-async function generate(id: string, userId: string, profile: GeneratePodcastInput["profile"]) {
+async function generate(id: string, userId: string, profile: GeneratePodcastInput["profile"], notifyAt: string | null) {
   const supabase = getSupabaseAdmin();
   try {
     const openaiApiKey = process.env.OPENAI_API_KEY;
@@ -186,7 +224,16 @@ async function generate(id: string, userId: string, profile: GeneratePodcastInpu
     }).eq("id", id);
     assertSupabase(completed.error, "complete brief");
 
-    await notifyBriefReady(id, userId, script.title);
+    // Scheduler-triggered briefs usually finish well before their target
+    // notify_at (generation is fast, the lead time is generous) — only
+    // notify right away if there's no target, or the target has already
+    // passed. Otherwise leave notified_at unset; sendDueNotifications()
+    // picks it up once notify_at actually arrives.
+    if (!notifyAt || new Date(notifyAt).getTime() <= Date.now()) {
+      await notifyBriefReady(id, userId, script.title);
+      const marked = await supabase.from("briefs").update({ notified_at: new Date().toISOString() }).eq("id", id);
+      assertSupabase(marked.error, "mark brief notified");
+    }
   } catch (error) {
     const code = error instanceof Error ? error.message : "generation_failed";
     const message = code === "missing_api_key"
@@ -206,7 +253,8 @@ export async function getBrief(id: string, userId: string): Promise<BriefView | 
   if (!brief.data) return null;
 
   if (["queued", "researching", "scripting", "synthesizing"].includes(brief.data.status as string) && !activeJobs.has(id)) {
-    loadProfile(userId).then((profile) => startGeneration(id, userId, profile)).catch(() => { /* stays queued; next poll retries */ });
+    const notifyAt = (brief.data.notify_at as string | null) ?? null;
+    loadProfile(userId).then((profile) => startGeneration(id, userId, profile, notifyAt)).catch(() => { /* stays queued; next poll retries */ });
   }
 
   const [chapters, sources] = await Promise.all([

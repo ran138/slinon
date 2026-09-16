@@ -33,6 +33,7 @@ RULES:
 - No defamatory, unlawful, or otherwise legally risky statements about any person, company, or entity.
 - Do not open with any AI-disclosure, educational-disclaimer, or "welcome to the show" preamble — start directly with the first real story.
 - You may combine multiple items about the same profile entity into a single chapter.
+- An item's relatedSymbols lists every one of the user's holdings/watchlist entries it actually covers, not just its primary topicLabel. When an item is relevant to several correlated holdings at once (e.g. multiple index-tracking or leveraged ETFs all moving together on the same broad market news), name all of the genuinely relevant ones by their profile name within whichever chapter covers it — don't silently mention only one and leave the others out.
 - If there is more material than fits the word budget, prioritize the items most material to this exact user profile and omit minor/low-impact ones — do not compress everything in.
 - If there is very little material overall — not enough to responsibly fill even a short chapter — write a brief summary paragraph covering what's actually available and close with a short, natural closing line, rather than leaving a chapter feeling cut off or padded with filler.
 - For every non-general chapter, reasonKind/reasonLabel must correspond to exactly one entity from USER PROFILE (a holding, a watchlist item, or an interest label) that the chapter is actually about. Use "general" only for broad market/economy context not tied to one entity.
