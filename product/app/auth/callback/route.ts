@@ -14,8 +14,17 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       if (type === "recovery") return NextResponse.redirect(new URL("/reset-password/confirm", request.url));
-      const dest = next && next.startsWith("/") ? next : "/vestory_app";
-      return NextResponse.redirect(new URL(dest, request.url));
+      const fallback = new URL("/vestory_app", request.url);
+      let destination = fallback;
+      if (next && next.startsWith("/")) {
+        try {
+          const candidate = new URL(next, request.url);
+          if (candidate.origin === url.origin) destination = candidate;
+        } catch {
+          // Invalid redirect targets fall back to the authenticated app.
+        }
+      }
+      return NextResponse.redirect(destination);
     }
     console.error("[auth/callback] exchangeCodeForSession failed", error.message);
     return NextResponse.redirect(new URL("/login?error=auth_callback_failed", request.url));

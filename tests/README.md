@@ -37,10 +37,10 @@ require the relevant local services or provider credentials.
 ## Latest run
 
 - 521 tests collected
-- 518 tests passed
-- 3 assertions failed, representing 2 distinct application defects
-- No application, configuration, migration, or Git files were changed
+- 519 tests passed
+- 2 assertions failed, representing 1 distinct application defect
+- The OAuth redirect defect was fixed in the authentication callback
 
-The remaining failures deliberately preserve evidence for an OAuth open
-redirect and a multi-word custom-interest parsing regression. They should not
-be hidden by weakening the assertions.
+The remaining failures deliberately preserve evidence for a multi-word
+custom-interest parsing regression. They should not be hidden by weakening the
+assertions.
