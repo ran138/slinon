@@ -15,7 +15,6 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? undefined;
   const oauthError = searchParams.get("error");
-  const oauthDetail = searchParams.get("detail");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,10 +22,10 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(
-    // oauthDetail is a protocol-level diagnostic string (e.g. from GitHub/
-    // Supabase's OAuth exchange), not a secret — surfaced here temporarily
-    // so this is debuggable without platform log access.
-    oauthError ? `ההתחברות עם הספק נכשלה. נסו שוב.${oauthDetail ? ` (${oauthDetail})` : ""}` : null,
+    // Never show the raw provider/protocol error here — the real reason is
+    // logged server-side (app/auth/callback/route.ts) for us to debug;
+    // the user only ever needs a plain, actionable message.
+    oauthError ? "ההתחברות נכשלה. נסו שוב או התחברו בדרך אחרת." : null,
   );
   const [checkEmail, setCheckEmail] = useState(false);
   const [resent, setResent] = useState(false);
