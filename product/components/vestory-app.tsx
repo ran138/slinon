@@ -7,6 +7,7 @@ import { Notice } from "@/components/notice";
 import { Logo } from "@/components/logo";
 import { initAnalytics, identifyUser, resetAnalytics } from "@/lib/analytics";
 import { LegalFooter } from "@/components/legal/footer";
+import { TodayDashboard, TodayPlayerCard } from "@/components/today-dashboard";
 import { INTERESTS, POPULAR_ASSETS, conceptKey, matchAsset, matchInterest, normalizeInterests, searchAssets, searchInterests } from "@/lib/onboarding";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1180,162 +1181,18 @@ function GeneratingScreen({ briefId, onDone, onBack }: { briefId: string; onDone
 
 // ─── DashboardScreen ──────────────────────────────────────────────────────────
 
-const WAVEFORM_HEIGHTS = Array.from({ length: 60 }, (_, i) => 20 + Math.sin(i * 0.4) * 14 + Math.abs(Math.sin(i * 1.1 + 0.7)) * 22);
-
-function greetingForIsraelTime(): string {
-  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", hour: "numeric", hour12: false }).format(new Date()));
-  if (hour >= 5 && hour < 12) return "בוקר טוב ☀️";
-  if (hour >= 12 && hour < 17) return "צהריים טובים 🌞";
-  if (hour >= 17 && hour < 21) return "ערב טוב 🕯️";
-  return "לילה טוב 🌙";
-}
-
-function DashboardScreen({ holdings, brief, onNav, onPlay, onGenerate, generating }: {
-  holdings: Holding[]; brief: BriefView | null; onNav: (s: Screen) => void; onPlay: () => void; onGenerate: () => void; generating: boolean;
+function DashboardScreen({ assets, brief, onNav, onPlay, onGenerate, generating, email, plan, onSignOut, canGenerate, preview }: {
+  assets: Holding[]; brief: BriefView | null; onNav: (s: Screen) => void; onPlay: () => void; onGenerate: () => void; generating: boolean;
+  email: string | null; plan: "daily" | "weekly"; onSignOut: () => void; canGenerate: boolean; preview: boolean;
 }) {
-  const today = new Date().toLocaleDateString("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Jerusalem" });
-  const greeting = greetingForIsraelTime();
-
-  if (!brief) {
-    return (
-      <div className="min-h-screen pb-16">
-        <div className="max-w-5xl mx-auto px-6 pt-8">
-          <div className="mb-7">
-            <p className="text-sm font-medium mb-1" style={{ color: "#9b9dae" }}>{today}</p>
-            <h1 className="text-3xl font-bold" style={{ color: "#f7f7fb" }}>{greeting}</h1>
-          </div>
-          <div className="rounded-2xl p-10 text-center" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
-            <p style={{ color: "#9b9dae", marginBottom: 16 }}>{holdings.length ? "עדיין אין לך פודקאסט מוכן." : "הוסיפו תיק ותחומי עניין כדי ליצור פודקאסט אישי."}</p>
-            <button onClick={holdings.length ? onGenerate : () => onNav("settings-portfolio")} disabled={generating} className="px-6 h-11 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", cursor: generating ? "not-allowed" : "pointer", opacity: generating ? 0.6 : 1 }}>
-              {generating ? "יוצרים…" : holdings.length ? "יצירת פודקאסט" : "הוספת תיק"}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const totalDuration = brief.chapters.reduce((s, c) => s + (c.durationMs ?? 0), 0);
-
-  return (
-    <div className="min-h-screen pb-16">
-      <div className="max-w-5xl mx-auto px-6 pt-8">
-        <div className="mb-7">
-          <p className="text-sm font-medium mb-1" style={{ color: "#9b9dae" }}>{today}</p>
-          <h1 className="text-3xl font-bold" style={{ color: "#f7f7fb" }}>{greeting}</h1>
-        </div>
-
-        <div className="grid gap-6 responsive-aside-grid" style={{ gridTemplateColumns: "1fr 300px" }}>
-          <div className="space-y-5">
-            <div className="rounded-2xl overflow-hidden relative" style={{ background: "linear-gradient(155deg, rgba(22,22,34,0.98) 0%, rgba(16,16,28,0.99) 100%)", border: "1px solid rgba(123,111,245,0.22)", boxShadow: "0 0 0 1px rgba(255,255,255,0.03) inset, 0 8px 48px rgba(0,0,0,0.5), 0 0 60px rgba(100,88,230,0.1)" }}>
-              <div style={{ height: 2, background: "linear-gradient(90deg, transparent 3%, #7b6ff5 30%, #5b8af0 70%, transparent 97%)" }} />
-              <div className="p-6">
-                <div className="flex items-start justify-between mb-5">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <div className="px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider" style={{ background: "rgba(52,211,153,0.15)", color: "#34d399" }}>חדש</div>
-                      <span className="text-xs" style={{ color: "#565968" }}>{new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit" }).format(new Date(brief.createdAt))}</span>
-                    </div>
-                    <h2 className="text-xl font-bold leading-snug" style={{ color: "#f7f7fb" }}>{brief.title || "הפודקאסט של היום"}</h2>
-                    <p className="text-sm mt-1" style={{ color: "#9b9dae" }}>{formatSeconds(totalDuration / 1000)} · {brief.chapters.length} נושאים</p>
-                  </div>
-                  <button onClick={onPlay} className="flex-shrink-0 transition-all hover:scale-105 active:scale-95" style={{ width: 56, height: 56, borderRadius: "50%", background: "linear-gradient(135deg, #7b6ff5, #5b8af0)", boxShadow: "0 2px 20px rgba(110,95,240,0.45), 0 0 0 1px rgba(255,255,255,0.12) inset", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="6 3 20 12 6 21 6 3" /></svg>
-                  </button>
-                </div>
-
-                <div className="flex items-end gap-0.5 mb-5" style={{ height: 40, opacity: 0.55, direction: "ltr" }}>
-                  {WAVEFORM_HEIGHTS.map((h, i) => (
-                    <div key={i} className="flex-1 rounded-full" style={{ height: `${h}%`, background: i < 14 ? "linear-gradient(to top, #7b6ff5, #5b8af0)" : "rgba(255,255,255,0.12)" }} />
-                  ))}
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  {brief.chapters.slice(0, 3).map((ch, i) => (
-                    <button key={ch.id} onClick={() => onNav("player")} className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors group" style={{ background: "none", border: "none", cursor: "pointer" }}>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-mono w-4 text-center flex-shrink-0" style={{ color: "#565968" }}>{i + 1}</span>
-                        <span className="text-sm text-right" style={{ color: "#f7f7fb" }}>{ch.title}</span>
-                      </div>
-                      <span className="text-xs font-mono" style={{ color: "#565968" }}>{fmtMs(ch.durationMs)}</span>
-                    </button>
-                  ))}
-                  {brief.chapters.length > 3 && (
-                    <button onClick={() => onNav("player")} className="w-full text-center py-2 transition-colors hover:opacity-70" style={{ fontSize: "0.75rem", color: "#565968", background: "none", border: "none", cursor: "pointer" }}>
-                      + {brief.chapters.length - 3} נושאים נוספים
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#565968", marginBottom: 10 }}>למה הנושאים האלה בפודקאסט שלך?</h3>
-              <div className="grid gap-3" style={{ gridTemplateColumns: holdings.length === 0 ? "1fr" : "1fr 1fr" }}>
-                {brief.chapters.filter((c) => c.reasonKind !== "general").slice(0, 4).map((c) => (
-                  <button key={c.id} onClick={() => onNav("player")} className="text-right transition-all hover:scale-[1.01] active:scale-[0.99]" style={{
-                    borderRadius: 14, padding: "14px 15px", cursor: "pointer",
-                    background: c.reasonKind === "portfolio" ? "rgba(52,211,153,0.04)" : "rgba(123,111,245,0.05)",
-                    border: `1px solid ${c.reasonKind === "portfolio" ? "rgba(52,211,153,0.14)" : "rgba(123,111,245,0.16)"}`,
-                    boxShadow: "0 2px 12px rgba(0,0,0,0.2)",
-                  }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span style={{ fontSize: "0.58rem", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: c.reasonKind === "portfolio" ? "#34d399" : "#9d94f7", background: c.reasonKind === "portfolio" ? "rgba(52,211,153,0.12)" : "rgba(123,111,245,0.14)", padding: "2px 6px", borderRadius: 4 }}>
-                        {c.reasonKind === "portfolio" ? "מהתיק" : c.reasonKind === "watchlist" ? "במעקב" : "תחום עניין"}
-                      </span>
-                      <span className="text-sm font-bold" style={{ color: "#f7f7fb" }}>{c.reasonLabel}</span>
-                    </div>
-                    <p className="text-xs leading-relaxed" style={{ color: "#8a8ab0" }}>{c.title}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d", boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}>
-              <h3 className="text-sm font-semibold mb-4" style={{ color: "#f7f7fb" }}>התיק שלך</h3>
-              {holdings.length === 0 ? (
-                <div className="text-center py-5">
-                  <p className="text-xs mb-3" style={{ color: "#565968" }}>עדיין לא הוספת נכסים לתיק</p>
-                  <button onClick={() => onNav("settings-portfolio")} className="text-xs px-3 py-1.5 rounded-lg transition-colors hover:bg-white/5" style={{ color: "#7b6ff5", border: "1px solid rgba(123,111,245,0.25)", background: "none", cursor: "pointer" }}>הוספת נכס</button>
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {holdings.map((h) => (
-                    <div key={h.ticker} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, background: "rgba(123,111,245,0.12)", border: "1px solid rgba(123,111,245,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <span className="font-bold" style={{ fontSize: "0.65rem", color: "#9d94f7" }}>{h.ticker.replace(/[^A-Z]/g, "").slice(0, 2)}</span>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold" style={{ color: "#f7f7fb", direction: "ltr", textAlign: "right" }}>{h.ticker}</p>
-                          {h.name && <p style={{ fontSize: "0.68rem", color: "#565968", textAlign: "right" }}>{h.name}</p>}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => onNav("settings-portfolio")} className="w-full mt-4 text-xs py-2 rounded-lg hover:bg-white/5 transition-colors" style={{ color: "#565968", border: "1px solid #292c3d", background: "none", cursor: "pointer" }}>עריכת התיק</button>
-            </div>
-
-            <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d", boxShadow: "0 4px 24px rgba(0,0,0,0.3)" }}>
-              <h3 className="text-sm font-semibold mb-1" style={{ color: "#f7f7fb" }}>דופק השוק</h3>
-              <p style={{ fontSize: "0.68rem", color: "#565968", marginBottom: 14 }}>נתוני שוק מספריים יוצגו רק כאשר יש להם מקור מאומת.</p>
-              <div style={{ padding: "12px", borderRadius: 10, border: "1px dashed #292c3d", textAlign: "center", color: "#565968", fontSize: "0.8rem" }}>לא זמין כרגע</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <TodayDashboard assets={assets} brief={brief} email={email} plan={plan} onNav={onNav} onSignOut={onSignOut} onGenerate={onGenerate} generating={generating} canGenerate={canGenerate} preview={preview}
+    player={<PlayerScreen key={brief?.id} brief={brief} onNav={onNav} embedded onOpenPlayer={onPlay}/>} />;
 }
 
 // ─── PlayerScreen ─────────────────────────────────────────────────────────────
 
-function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
-  brief: BriefView | null; onNav: (s: Screen) => void; autoplay?: boolean; onAutoplayed?: () => void;
+function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed, embedded = false, onOpenPlayer }: {
+  brief: BriefView | null; onNav: (s: Screen) => void; autoplay?: boolean; onAutoplayed?: () => void; embedded?: boolean; onOpenPlayer?: () => void;
 }) {
   const [playing, setPlaying] = useState(autoplay);
   const [elapsed, setElapsed] = useState(0);
@@ -1397,6 +1254,10 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
     const ratio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
     seekTo(ratio * (totalDuration / 1000));
   }
+
+  if (embedded) return <TodayPlayerCard brief={brief} audioRef={audioRef} playing={playing} elapsed={elapsed} totalDuration={totalDuration} progress={progress} activeChapter={activeChapter} speed={speed}
+    onSpeed={setSpeed} onToggle={() => setPlaying((value) => !value)} onSeek={seekTo} onSeekChapter={seekToChapter}
+    onAudioPlay={() => setPlaying(true)} onAudioPause={() => setPlaying(false)} onAudioTime={setElapsed} onAudioEnd={() => setPlaying(false)} onOpenPlayer={onOpenPlayer ?? (() => onNav("player"))}/>;
 
   return (
     <div className="min-h-screen pb-16">
@@ -2160,6 +2021,7 @@ function assetToHolding(a: Profile["assets"][number]): Holding {
 }
 
 export function VestoryApp() {
+  const [todayPreview, setTodayPreview] = useState(false);
   const [screen, setScreen] = useState<Screen>("welcome");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -2187,9 +2049,21 @@ export function VestoryApp() {
     const isLocalPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname);
     const previewScreen = isLocalPreview ? query.get("preview") : null;
 
+    if (previewScreen === "today" || previewScreen === "today-empty") {
+      // Explicit localhost-only QA fixture; never used for signed-in production data.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTodayPreview(true);
+      setProfile({ ...EMPTY_PROFILE, onboardingComplete: true, assets: [{ kind: "holding", symbol: "SPY", name: "S&P 500" }, { kind: "holding", symbol: "QQQ", name: "Nasdaq 100" }, { kind: "watchlist", symbol: "SPXL", name: "Direxion Daily S&P 500" }, { kind: "watchlist", symbol: "TQQQ", name: "ProShares UltraPro QQQ" }], interests: [{ label: "AI" }] });
+      if (previewScreen === "today") {
+        // Same-origin QA audio preserves the existing media-src security policy.
+        const demo: BriefView = { id: "local-today-qa", title: "עדכון שוק שבועי: בינה מלאכותית, מניות ותשואות אג״ח", audioUrl: "/assets/local-today-qa.wav", status: "completed", progress: 100, stageLabel: "דוגמה מקומית", targetMinutes: 5, durationMs: 90000, errorMessage: null, createdAt: new Date().toISOString(), completedAt: new Date().toISOString(), sources: [], chapters: [{ id: "qa-ai", position: 0, title: "בינה מלאכותית: רגולציה ורכישה אפשרית", script: "", reasonKind: "interest", reasonLabel: "AI", durationMs: 52000, startMs: 0, audioUrl: null }, { id: "qa-market", position: 1, title: "מניות, תשואות ונפט", script: "", reasonKind: "portfolio", reasonLabel: "SPY", durationMs: 38000, startMs: 52000, audioUrl: null }] };
+        setBriefs([demo]); setActiveBriefId(demo.id);
+      }
+      setScreen("dashboard"); setLoading(false); return;
+    }
+
     if (previewScreen === "preferences" || previewScreen === "welcome" || previewScreen === "onboarding") {
       // Local-only preview routing intentionally initializes several related client states together.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfile({ ...EMPTY_PROFILE, onboardingComplete: previewScreen === "preferences" });
       setScreen(previewScreen === "preferences" ? "settings-personalization" : previewScreen === "onboarding" ? "portfolio-entry" : "welcome");
       setLoading(false);
@@ -2328,7 +2202,7 @@ export function VestoryApp() {
 
   return (
     <div className="vestory-ui" style={{ minHeight: "100%", background: "#080910" }}>
-      <TopBar onNav={goTo} screen={screen} onSignOut={() => void handleSignOut()} />
+      {screen !== "dashboard" && <TopBar onNav={goTo} screen={screen} onSignOut={() => void handleSignOut()} />}
       {!topBarScreens.includes(screen) && (
         <button
           onClick={() => void handleSignOut()}
@@ -2375,7 +2249,7 @@ export function VestoryApp() {
       {screen === "generating" && generateBriefId && <GeneratingScreen briefId={generateBriefId} onDone={() => void handleGeneratingDone()} onBack={() => goTo("dashboard")} />}
 
       {screen === "dashboard" && (
-        <DashboardScreen holdings={holdings} brief={activeBrief} onNav={goTo} onPlay={playBrief} onGenerate={() => void handleGenerateFromDashboard()} generating={generating} />
+        <DashboardScreen assets={profile.assets.map(assetToHolding)} brief={activeBrief} onNav={goTo} onPlay={playBrief} onGenerate={() => void handleGenerateFromDashboard()} generating={generating} email={profile.email} plan={profile.podcastPlan} onSignOut={() => void handleSignOut()} canGenerate={profile.assets.length > 0 || profile.interests.length > 0} preview={todayPreview} />
       )}
       {screen === "player" && (
         <PlayerScreen brief={activeBrief} onNav={goTo} autoplay={playOnEnter} onAutoplayed={() => setPlayOnEnter(false)} />
@@ -2397,7 +2271,7 @@ export function VestoryApp() {
       {screen === "history" && (
         <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} onPlay={(id) => playBrief(id)} />
       )}
-      <LegalFooter />
+      <div className={screen === "dashboard" ? "today-legal-footer" : undefined}><LegalFooter /></div>
     </div>
   );
 }
