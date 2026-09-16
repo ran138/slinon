@@ -41,6 +41,18 @@ generated `KEEPALIVE_SECRET` in both Vercel Production environment variables and
 GitHub Actions repository secrets. This reduces the likelihood of Free Plan
 inactivity pausing, but it is not a substitute for backups or a paid plan.
 
+## Podcast scheduler precision
+
+Vercel Hobby's own cron can only run once a day with imprecise timing, which
+isn't enough to honor each user's chosen delivery time. The
+`Podcast_Scheduler.yml` GitHub Actions workflow polls the existing
+`/api/scheduler/tick` route (the same one `vercel.json`'s cron already calls)
+every ~10 minutes instead, using the same `CRON_SECRET` already configured in
+Vercel — add it to GitHub Actions repository secrets too. `vercel.json`'s
+once-daily cron entry stays in place as a fallback in case this workflow ever
+stops running; both call the same idempotent, per-user-claiming endpoint, so
+there's no risk of double-triggering a user.
+
 ## Commands
 
 - `npm run dev` — start Next.js on port 5175.

@@ -5,7 +5,14 @@ import { computeNextRunAt, type PodcastPlan } from "@/lib/schedule";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
-const GENERATION_LEAD_MS = 20 * 60 * 1000;
+// Sized for the external trigger cadence (a GitHub Actions workflow polls
+// this route every ~10 min, see .github/workflows/Podcast_Scheduler.yml) —
+// large enough to cover typical generation time (observed: ~1.5-4.5 min) so
+// the episode is usually ready by the user's chosen time, small enough that
+// generation doesn't start needlessly early. Was 20 min, sized instead for
+// vercel.json's now-fallback-only once-daily cron, which needed a much wider
+// window to ever catch a due user at all.
+const GENERATION_LEAD_MS = 10 * 60 * 1000;
 
 type DueRow = {
   user_id: string;

@@ -1,0 +1,41 @@
+name: Podcast Scheduler
+
+on:
+  schedule:
+    # Vercel Hobby's own cron can only run once a day with imprecise timing,
+    # which isn't enough to actually honor each user's chosen delivery time —
+    # this polls the same endpoint every 10 minutes instead (GitHub's own
+    # scheduling isn't minute-precise either, but this gets generation
+    # within ~10-20 minutes of the requested time instead of "sometime that
+    # day"). vercel.json's cron entry stays as a once-daily fallback in case
+    # this workflow ever stops running.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: podcast-scheduler
+  cancel-in-progress: true
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger due podcast generations
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SCHEDULER_URL: https://slinon.me/api/scheduler/tick
+        run: |
+          test -n "$CRON_SECRET"
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-all-errors \
+            --max-time 240 \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "$SCHEDULER_URL"

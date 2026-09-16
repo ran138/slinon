@@ -32,10 +32,15 @@ function pickTopic(documentSymbols: string[], topics: TopicQuery[]): { kind: Top
 
 function toCollectedItem(document: KnowledgeDocument, topics: TopicQuery[]): CollectedItem {
   const { kind, label } = pickTopic(document.symbols ?? [], topics);
+  const documentSymbols = document.symbols ?? [];
+  const relatedSymbols = topics
+    .filter((topic) => topic.kind !== "interest" && documentSymbols.includes(topic.label.toUpperCase()))
+    .map((topic) => topic.label);
   return {
     id: document.id,
     topicKind: kind,
     topicLabel: label,
+    relatedSymbols,
     occurredAt: document.published_at ?? document.accessed_at,
     headline: document.title,
     summary: document.content,

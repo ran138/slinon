@@ -6,6 +6,13 @@ export interface CollectedItem {
   id: string;
   topicKind: TopicKind;
   topicLabel: string;
+  // Every holding/watchlist symbol this item is actually tagged with, not
+  // just the primary topicLabel above — a single article commonly covers
+  // several correlated symbols at once (e.g. SPY/QQQ/SPXL/TQQQ all move
+  // together on a broad index swing). Without this, the model only ever
+  // sees the one arbitrarily-first-matched symbol and silently never
+  // mentions the others, even when the source material covers them too.
+  relatedSymbols: string[];
   occurredAt: string; // ISO datetime the event actually happened
   headline: string;
   summary: string;
