@@ -61,7 +61,6 @@ export function TodayDashboard({ assets, brief, player, email, plan, onNav, onSi
   const date = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Jerusalem" }).format(new Date());
   const personal = brief?.chapters.filter((chapter) => chapter.reasonKind !== "general") ?? [];
   const source = brief?.sources[0];
-  const ready = brief?.status === "completed" && Boolean(brief.audioUrl);
   const insights = [
     { icon: AudioLines, title: "סקירת שווקים עדכנית", text: brief?.chapters[0]?.title ?? "סקירת השוק תופיע כאן כשהפודקאסט יהיה מוכן.", action: "player" as const },
     { icon: Sparkles, title: "חדשות שמעניינות אותך", text: personal[0] ? `${personal[0].reasonLabel} · ${personal[0].title}` : "התוכן מותאם לנכסים ולתחומי העניין שבחרת.", action: "player" as const },
@@ -72,8 +71,7 @@ export function TodayDashboard({ assets, brief, player, email, plan, onNav, onSi
     <main className="today-content" dir="rtl">
       {/* The explicit localhost preview uses QA fixtures; no debug copy is rendered. */}
       <section className="today-hero" aria-labelledby="today-greeting"><HeroArtwork/>
-        <div className="today-hero-aside"><span>מידע חכם.</span><span>תוכן אישי.</span><span>בזמן שבחרת.</span></div>
-        <div className="today-hero-heading"><h1 id="today-greeting">{greetingForIsraelTime()}</h1><h2>{ready ? "הפודקאסט שלך מוכן" : brief ? "מכינים את הפודקאסט שלך" : "הפודקאסט הבא מתחיל כאן"}</h2><p>כל מה שחשוב להשקעות שלך</p></div>
+        <div className="today-hero-heading"><h1 id="today-greeting">{greetingForIsraelTime()}</h1></div>
         <div className="today-hero-meta"><span>{date}</span><small>{plan === "weekly" ? "העדכון השבועי שלך" : "העדכון היומי שלך"}</small></div>
       </section>
       <div className="today-podcast-grid" dir="ltr">
