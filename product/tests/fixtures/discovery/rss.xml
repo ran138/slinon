@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <language>he</language>
+    <item>
+      <title><![CDATA[חדשות כלכליות חשובות]]></title>
+      <link>https://www.ynet.co.il/economy/article/abc?utm_source=test</link>
+      <description><![CDATA[<p>תקציר הכתבה</p>]]></description>
+      <pubDate>Tue, 15 Sep 2026 10:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>קישור זר נפסל</title>
+      <link>https://example.org/not-allowed</link>
+    </item>
+  </channel>
+</rss>

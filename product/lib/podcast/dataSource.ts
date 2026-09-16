@@ -11,6 +11,11 @@ export interface TopicQuery {
 const SOURCE_NAMES: Record<string, string> = {
   calcalist: "כלכליסט",
   ynet: "Ynet",
+  globes: "גלובס",
+  themarker: "TheMarker",
+  reuters: "Reuters",
+  cnbc: "CNBC",
+  yahoo_finance: "Yahoo Finance",
   sec_edgar: "SEC EDGAR",
 };
 
@@ -45,7 +50,7 @@ function toCollectedItem(document: KnowledgeDocument, topics: TopicQuery[]): Col
     headline: document.title,
     summary: document.content,
     numericFacts: [],
-    sourceUrl: document.source_url,
+    sourceUrl: document.canonical_url ?? document.source_url,
     sourceName: SOURCE_NAMES[document.source_site] ?? document.source_site,
   };
 }

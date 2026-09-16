@@ -12,13 +12,16 @@ type KnowledgeAsset = {
 
 export type KnowledgeDocument = {
   id: string;
-  source_site: "calcalist" | "ynet" | "sec_edgar";
+  document_id: string;
+  source_site: "calcalist" | "ynet" | "globes" | "themarker" | "reuters" | "cnbc" | "yahoo_finance" | "sec_edgar";
   source_kind: "news" | "financial_report";
   source_url: string;
+  canonical_url: string;
   title: string;
   published_at: string | null;
   accessed_at: string;
   content: string;
+  chunk_indexes: number[];
   symbols: string[];
   topics: string[];
   metadata: Record<string, unknown>;
@@ -43,3 +46,5 @@ export function searchPortfolioKnowledge(options: {
 }): Promise<KnowledgeDocument[]>;
 
 export function formatKnowledgeDossier(documents: KnowledgeDocument[]): string;
+
+export function mergeKnowledgeChunkMatches(rows: Array<Record<string, unknown>>, limit?: number): KnowledgeDocument[];

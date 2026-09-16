@@ -1,5 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { refreshPortfolioKnowledge } from "../lib/knowledge.mjs";
+import { assertLocalServiceEnvironment } from "./lib/local-only.mjs";
+
+assertLocalServiceEnvironment();
 
 const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;

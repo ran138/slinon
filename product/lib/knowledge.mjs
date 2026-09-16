@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { createHash } from "node:crypto";
 
 export const EMBEDDING_MODEL = "text-embedding-3-large";
 export const EMBEDDING_DIMENSIONS = 1536;
@@ -142,15 +143,24 @@ async function createEmbeddings(client, documents, embeddingModel) {
   return documents.map((document, index) => ({ ...document, embedding: result.data[index].embedding }));
 }
 
-function dbRow(document, embeddingModel, accessedAt) {
+function hash(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function dbRow(document, embeddingModel, accessedAt, version) {
   return {
     source_site: document.sourceSite,
     source_kind: document.sourceKind,
     source_url: document.sourceUrl,
+    canonical_url: document.sourceUrl,
+    source_id: `${document.sourceSite}:${hash(document.sourceUrl)}`,
     title: document.title,
     published_at: null,
     accessed_at: accessedAt,
     content: document.content,
+    content_hash: hash(document.content),
+    version,
+    processing_status: "ready",
     symbols: document.symbols,
     topics: document.topics,
     metadata: document.metadata,
@@ -191,9 +201,44 @@ export async function refreshPortfolioKnowledge({
     const embedded = await createEmbeddings(client, documents, embeddingModel);
     if (embedded.length) {
       const accessedAt = new Date().toISOString();
-      const saved = await supabase.from("knowledge_documents")
-        .upsert(embedded.map((document) => dbRow(document, embeddingModel, accessedAt)), { onConflict: "source_url" });
-      if (saved.error) throw new Error(`save knowledge documents: ${saved.error.message}`);
+      for (const document of embedded) {
+        const sourceId = `${document.sourceSite}:${hash(document.sourceUrl)}`;
+        const contentHash = hash(document.content);
+        const existing = await supabase.from("knowledge_documents")
+          .select("id")
+          .eq("source_site", document.sourceSite)
+          .eq("source_id", sourceId)
+          .eq("content_hash", contentHash)
+          .maybeSingle();
+        if (existing.error) throw new Error(`find knowledge document: ${existing.error.message}`);
+        if (existing.data) continue;
+        let saved = false;
+        for (let attempt = 0; attempt < 3 && !saved; attempt += 1) {
+          const latest = await supabase.from("knowledge_documents")
+            .select("version")
+            .eq("source_site", document.sourceSite)
+            .eq("source_id", sourceId)
+            .order("version", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (latest.error) throw new Error(`find knowledge version: ${latest.error.message}`);
+          const inserted = await supabase.from("knowledge_documents")
+            .insert(dbRow(document, embeddingModel, accessedAt, (latest.data?.version ?? 0) + 1));
+          if (!inserted.error) {
+            saved = true;
+            break;
+          }
+          if (inserted.error.code !== "23505") throw new Error(`save knowledge document: ${inserted.error.message}`);
+          const raced = await supabase.from("knowledge_documents")
+            .select("id")
+            .eq("canonical_url", document.sourceUrl)
+            .eq("content_hash", contentHash)
+            .maybeSingle();
+          if (raced.error) throw new Error(`verify concurrent knowledge document: ${raced.error.message}`);
+          if (raced.data) saved = true;
+        }
+        if (!saved) throw new Error("save knowledge document: concurrent version conflict");
+      }
     }
     const sourceCounts = Object.fromEntries(sourceResults.map(({ definition, documents: items }) => [definition.site, items.length]));
     const completedAt = new Date().toISOString();
@@ -230,14 +275,57 @@ export async function searchPortfolioKnowledge({
     encoding_format: "float",
     input: query,
   });
-  const match = await supabase.rpc("match_knowledge_documents", {
+  const match = await supabase.rpc("match_knowledge_chunks", {
     query_embedding: result.data[0].embedding,
     filter_symbols: symbols,
-    match_count: limit,
+    match_count: Math.min(50, Math.max(limit, limit * 3)),
     min_similarity: 0.2,
   });
-  if (match.error) throw new Error(`search knowledge documents: ${match.error.message}`);
-  return match.data ?? [];
+  if (match.error) throw new Error(`search knowledge chunks: ${match.error.message}`);
+  return mergeKnowledgeChunkMatches(match.data ?? [], limit);
+}
+
+export function mergeKnowledgeChunkMatches(rows, limit = 15) {
+  const documents = new Map();
+  for (const row of rows) {
+    const key = row.document_id;
+    if (!key) continue;
+    const current = documents.get(key);
+    const chunk = { index: row.chunk_index, content: row.content };
+    if (!current) {
+      documents.set(key, {
+        id: key,
+        document_id: key,
+        source_site: row.source_site,
+        source_kind: row.source_kind,
+        source_url: row.source_url,
+        canonical_url: row.canonical_url ?? row.source_url,
+        title: row.title,
+        published_at: row.published_at,
+        accessed_at: row.accessed_at,
+        chunks: [chunk],
+        symbols: row.symbols ?? [],
+        topics: row.topics ?? [],
+        metadata: row.metadata ?? {},
+        similarity: row.similarity,
+      });
+    } else {
+      current.chunks.push(chunk);
+      current.similarity = Math.max(current.similarity, row.similarity);
+    }
+  }
+  return [...documents.values()]
+    .map((document) => {
+      const chunks = document.chunks.sort((left, right) => left.index - right.index);
+      return {
+        ...document,
+        content: chunks.map((chunk) => chunk.content).join("\n\n"),
+        chunk_indexes: chunks.map((chunk) => chunk.index),
+        chunks: undefined,
+      };
+    })
+    .sort((left, right) => right.similarity - left.similarity)
+    .slice(0, Math.max(1, Math.min(limit, 50)));
 }
 
 export function formatKnowledgeDossier(documents) {
