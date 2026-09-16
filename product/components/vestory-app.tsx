@@ -9,6 +9,7 @@ import { VestoryWordmark } from "@/components/vestory-wordmark";
 import { initAnalytics, identifyUser, resetAnalytics } from "@/lib/analytics";
 import { LegalFooter } from "@/components/legal/footer";
 import { TodayDashboard, TodayPlayerCard } from "@/components/today-dashboard";
+import { TrackingPage } from "@/components/tracking-page";
 import { INTERESTS, POPULAR_ASSETS, conceptKey, matchAsset, matchInterest, normalizeInterests, searchAssets, searchInterests } from "@/lib/onboarding";
 import { targetMinutesForPlan } from "@/lib/schedule";
 
@@ -1644,298 +1645,21 @@ function SourcesScreen({ brief, onNav }: { brief: BriefView | null; onNav: (s: S
   );
 }
 
-// ─── PortfolioSettingsScreen ──────────────────────────────────────────────────
-
-function PortfolioSettingsScreen({ holdings, interests, onSave }: {
-  holdings: Holding[]; interests: string[];
-  onSave: (h: Holding[], interests: string[]) => Promise<void>;
-}) {
-  const [rows, setRows] = useState<Holding[]>(holdings);
-  const predefinedIds = interests.filter((id) => INTERESTS.some((i) => i.id === id));
-  const initialCustom = interests.filter((id) => !INTERESTS.some((i) => i.id === id));
-  const [selectedInterests, setSelectedInterests] = useState<string[]>(predefinedIds);
-  const [customInterests, setCustomInterests] = useState<string[]>(initialCustom);
-  const [interestInput, setInterestInput] = useState("");
-  const [interestFocused, setInterestFocused] = useState(false);
-  const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showAllPop, setShowAllPop] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadState, setUploadState] = useState<"idle" | "analyzing" | "detected" | "error">("idle");
-  const [uploadError, setUploadError] = useState("");
-  const [detectedAssets, setDetectedAssets] = useState<{ ticker: string; name: string }[]>([]);
-  const uploadRef = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
-
-  function removeHolding(id: string) { setRows(rows.filter((h) => h.id !== id)); }
-  function addFromPicker(ticker: string, name: string) {
-    if (!rows.find((h) => h.ticker === ticker)) setRows([...rows, { id: crypto.randomUUID(), ticker, name, quantity: "", avgCost: "" }]);
-  }
-  function toggleInterest(id: string) { setSelectedInterests((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id])); }
-  function addCustomInterest() {
-    const v = interestInput.trim();
-    if (v && !customInterests.includes(v)) setCustomInterests((p) => [...p, v]);
-    setInterestInput("");
-  }
-  function removeCustomInterest(v: string) { setCustomInterests((p) => p.filter((x) => x !== v)); }
-  async function save() {
-    setSaved("saving");
-    try {
-      await onSave(rows.filter((h) => h.ticker.trim()), [...selectedInterests, ...customInterests]);
-      setSaved("saved"); setTimeout(() => setSaved("idle"), 2000);
-    } catch { setSaved("error"); }
-  }
-
-  const searchResults = searchQuery.trim().length > 0
-    ? POPULAR_ASSETS.filter((a) => a.ticker.toLowerCase().includes(searchQuery.toLowerCase()) || a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.nameHe?.includes(searchQuery) || a.secNum?.includes(searchQuery)).slice(0, 6)
-    : [];
-  const visiblePop = showAllPop ? POPULAR_ASSETS.slice(0, 20) : POPULAR_ASSETS.slice(0, 6);
-
-  async function handleFileSelect(file: File) {
-    setUploadFile(file);
-    setUploadState("analyzing");
-    setUploadError("");
-    try {
-      const dataUrl: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const r = await fetch("/api/portfolio/parse-image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageDataUrl: dataUrl }) });
-      const data = (await r.json()) as { assets?: { symbol: string; name: string }[]; error?: string };
-      if (!r.ok) throw new Error(data.error || "ניתוח הצילום נכשל.");
-      const assets = (data.assets ?? []).map((a) => ({ ticker: a.symbol, name: a.name }));
-      setDetectedAssets(assets);
-      if (assets.length) setUploadState("detected");
-      else { setUploadState("error"); setUploadError("לא זיהינו נכסים בתמונה."); }
-    } catch (e) {
-      setUploadState("error");
-      setUploadError(e instanceof Error ? e.message : "ניתוח הצילום נכשל.");
-    }
-  }
-
-  function confirmDetected() {
-    const toAdd = detectedAssets.filter((a) => !rows.find((h) => h.ticker === a.ticker));
-    setRows([...rows, ...toAdd.map((a) => ({ id: crypto.randomUUID(), ticker: a.ticker, name: a.name, quantity: "", avgCost: "" }))]);
-    setUploadState("idle"); setUploadFile(null); setDetectedAssets([]);
-  }
-
-  const accentLine = <div style={{ height: 1, background: "linear-gradient(90deg, transparent 5%, #7b6ff5 38%, #5b8af0 62%, transparent 95%)" }} />;
-
-  return (
-    <div className="min-h-screen pb-16">
-      <div className="max-w-3xl mx-auto px-6 pt-8 space-y-5">
-        <div className="mb-2">
-          <h1 className="text-2xl font-bold" style={{ color: "#f7f7fb" }}>התיק שלי</h1>
-          <p className="mt-1 text-sm" style={{ color: "#9b9dae" }}>עדכן את האחזקות שלך לקבלת פודקאסט מדויק יותר</p>
-        </div>
-
-        <div className="flex items-start gap-2 p-3 rounded-xl" style={{ background: "rgba(91,138,240,0.06)", border: "1px solid rgba(91,138,240,0.13)" }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6a9ef5" strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 2 }}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-          <p className="text-xs leading-relaxed" style={{ color: "#686890" }}>פרטים נוספים יעזרו ל-VESTORY לדייק יותר את ההתאמה האישית של הפודקאסט.</p>
-        </div>
-
-        <div className="rounded-2xl overflow-hidden" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
-          {rows.length === 0 ? (
-            <div className="px-5 py-10 text-center"><p className="text-sm mb-1" style={{ color: "#565968" }}>עדיין לא הוספת נכסים</p></div>
-          ) : (
-            rows.map((h) => (
-              <div key={h.id} style={{ borderTop: "1px solid #292c3d" }}>
-                <div className="flex items-center gap-4 px-5 py-3.5">
-                  <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, background: "rgba(123,111,245,0.12)", border: "1px solid rgba(123,111,245,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span className="text-xs font-bold" style={{ color: "#9d94f7" }}>{h.ticker.replace(/[^A-Z]/g, "").slice(0, 2)}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold" style={{ color: "#f7f7fb", direction: "ltr", textAlign: "right" }}>{h.ticker}</p>
-                    {h.name && <p className="text-xs mt-0.5" style={{ color: "#565968", textAlign: "right" }}>{h.name}</p>}
-                  </div>
-                  <button onClick={() => removeHolding(h.id)} className="opacity-30 hover:opacity-70 transition-opacity" style={{ color: "#f87171", background: "none", border: "none", cursor: "pointer" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="rounded-2xl overflow-hidden" style={{ background: "linear-gradient(155deg, rgba(26,26,40,0.97) 0%, rgba(18,18,30,0.98) 100%)", border: "1px solid rgba(123,111,245,0.16)" }}>
-          {accentLine}
-          <button onClick={() => setPickerOpen((v) => !v)} style={{ width: "100%", padding: "15px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", cursor: "pointer", fontFamily: "Heebo, sans-serif", direction: "rtl" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: "rgba(123,111,245,0.13)", border: "1px solid rgba(123,111,245,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9d94f7" strokeWidth="2" strokeLinecap="round"><path d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" /></svg>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "#d0d0e8", margin: 0 }}>הוספה מהרשימה</p>
-                <p style={{ fontSize: "0.72rem", color: "#686888", margin: 0 }}>בחרו מהרשימה של מניות נפוצות או חפשו נכס</p>
-              </div>
-            </div>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#505070" strokeWidth="2" style={{ transform: pickerOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }}><polyline points="6 9 12 15 18 9" /></svg>
-          </button>
-
-          {pickerOpen && (
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "14px 20px 18px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, height: 40, padding: "0 14px", borderRadius: 12, marginBottom: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(123,111,245,0.2)" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#505070" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-                <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="חיפוש לפי שם, סימבול או מספר נייר" style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: "0.86rem", color: "#d0d0ee", fontFamily: "Heebo, sans-serif", direction: "rtl", caretColor: "#7b6ff5" }} />
-                {searchQuery && <button onClick={() => setSearchQuery("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#505070", lineHeight: 0, padding: 0 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                {(searchQuery.trim() ? searchResults : visiblePop).map((asset) => {
-                  const inPortfolio = !!rows.find((h) => h.ticker === asset.ticker);
-                  return (
-                    <div key={asset.ticker} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 10, background: inPortfolio ? "rgba(52,211,153,0.06)" : "rgba(255,255,255,0.025)", border: `1px solid ${inPortfolio ? "rgba(52,211,153,0.2)" : "rgba(255,255,255,0.06)"}`, direction: "rtl" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: "0.86rem", fontWeight: 600, color: "#c0c0de" }}>{asset.name}</span>
-                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#7b6ff5", fontFamily: "JetBrains Mono, monospace", direction: "ltr" }}>{asset.ticker}</span>
-                      </div>
-                      <button onClick={() => addFromPicker(asset.ticker, asset.name)} disabled={inPortfolio} style={{ padding: "3px 12px", borderRadius: 7, fontSize: "0.74rem", fontWeight: 600, cursor: inPortfolio ? "default" : "pointer", fontFamily: "Heebo, sans-serif", background: inPortfolio ? "rgba(52,211,153,0.12)" : "rgba(123,111,245,0.14)", border: inPortfolio ? "1px solid rgba(52,211,153,0.25)" : "1px solid rgba(123,111,245,0.3)", color: inPortfolio ? "#34d399" : "#9d94f7" }}>
-                        {inPortfolio ? "נוסף ✓" : "+ הוספה"}
-                      </button>
-                    </div>
-                  );
-                })}
-                {!searchQuery.trim() && !showAllPop && (
-                  <button onClick={() => setShowAllPop(true)} style={{ marginTop: 6, width: "100%", padding: "7px 0", borderRadius: 8, background: "transparent", border: "1px solid rgba(255,255,255,0.08)", fontSize: "0.78rem", color: "#686888", cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>הצגת כל הנכסים ↓</button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl overflow-hidden" style={{ background: "linear-gradient(155deg, rgba(26,26,40,0.97) 0%, rgba(18,18,30,0.98) 100%)", border: "1px solid rgba(91,138,240,0.16)" }}>
-          <div style={{ height: 1, background: "linear-gradient(90deg, transparent 5%, #5b8af0 38%, #7b6ff5 62%, transparent 95%)" }} />
-          <button onClick={() => setUploadOpen((v) => !v)} style={{ width: "100%", padding: "15px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", cursor: "pointer", fontFamily: "Heebo, sans-serif", direction: "rtl" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: "rgba(91,138,240,0.13)", border: "1px solid rgba(91,138,240,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7bb3f5" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "#d0d0e8", margin: 0 }}>העלאת צילום מסך</p>
-                <p style={{ fontSize: "0.72rem", color: "#686888", margin: 0 }}>VESTORY יזהה את הנכסים עבורך</p>
-              </div>
-            </div>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#505070" strokeWidth="2" style={{ transform: uploadOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s", flexShrink: 0 }}><polyline points="6 9 12 15 18 9" /></svg>
-          </button>
-
-          {uploadOpen && (
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "14px 20px 18px" }}>
-              <p style={{ fontSize: "0.78rem", color: "#686888", margin: "0 0 14px" }}>אפשר להעלות צילום מסך של תיק ההשקעות כדי ש-VESTORY יזהה את הנכסים עבורך.</p>
-              <input ref={uploadRef} type="file" accept="image/png,image/jpeg,image/jpg" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFileSelect(f); }} />
-
-              {uploadState === "idle" && (
-                <div
-                  onClick={() => uploadRef.current?.click()}
-                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f?.type.startsWith("image/")) void handleFileSelect(f); }}
-                  style={{ borderRadius: 12, padding: "22px 20px", textAlign: "center", cursor: "pointer", background: dragOver ? "rgba(91,138,240,0.1)" : "rgba(255,255,255,0.02)", border: `1.5px dashed ${dragOver ? "rgba(91,138,240,0.5)" : "rgba(255,255,255,0.1)"}` }}
-                >
-                  <div style={{ width: 36, height: 36, borderRadius: 10, margin: "0 auto 10px", background: "rgba(91,138,240,0.13)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7bb3f5" strokeWidth="1.8" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-                  </div>
-                  <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#a0a0c0", margin: "0 0 3px" }}>העלאת קובץ</p>
-                  <p style={{ fontSize: "0.7rem", color: "#505070", margin: "0 0 6px" }}>או גררו צילום מסך לכאן</p>
-                  <p style={{ fontSize: "0.66rem", color: "#404060", margin: 0 }}>PNG, JPG או JPEG</p>
-                </div>
-              )}
-
-              {uploadState === "analyzing" && (
-                <div style={{ borderRadius: 12, padding: "18px", textAlign: "center", background: "rgba(91,138,240,0.06)", border: "1px solid rgba(91,138,240,0.16)" }}>
-                  <div style={{ width: 32, height: 32, borderRadius: "50%", margin: "0 auto 10px", background: "conic-gradient(from 0deg, #5b8af0, transparent)", animation: "spin-slow 1.1s linear infinite", WebkitMask: "radial-gradient(circle at center, transparent 11px, black 13px)", mask: "radial-gradient(circle at center, transparent 11px, black 13px)" }} />
-                  <p style={{ fontSize: "0.83rem", fontWeight: 600, color: "#a0a0c0", margin: "0 0 3px" }}>מנתח את הצילום מסך...</p>
-                  <p style={{ fontSize: "0.7rem", color: "#505070", margin: 0 }}>{uploadFile?.name}</p>
-                </div>
-              )}
-
-              {uploadState === "detected" && (
-                <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid rgba(91,138,240,0.2)" }}>
-                  <div style={{ padding: "10px 14px 8px", background: "rgba(91,138,240,0.07)", direction: "rtl" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 3 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                      <p style={{ fontSize: "0.8rem", fontWeight: 700, color: "#c0c0de", margin: 0 }}>{uploadFile?.name}</p>
-                    </div>
-                    <p style={{ fontSize: "0.73rem", color: "#686888", margin: 0 }}>זיהינו את הנכסים הבאים — בדקו שהכול נכון לפני שממשיכים.</p>
-                  </div>
-                  <div style={{ padding: "10px 14px 14px", direction: "rtl" }}>
-                    {detectedAssets.map((a) => (
-                      <div key={a.ticker} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                        <span style={{ fontSize: "0.83rem", color: "#c0c0de" }}>{a.name}</span>
-                        <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#7b6ff5", fontFamily: "JetBrains Mono, monospace", direction: "ltr" }}>{a.ticker}</span>
-                      </div>
-                    ))}
-                    <div style={{ marginTop: 10, display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                      <button onClick={() => { setUploadState("idle"); setUploadFile(null); setDetectedAssets([]); }} style={{ padding: "5px 13px", borderRadius: 7, fontSize: "0.76rem", fontWeight: 600, background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "#686888", cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>ביטול</button>
-                      <button onClick={confirmDetected} style={{ padding: "5px 16px", borderRadius: 7, fontSize: "0.76rem", fontWeight: 700, background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", color: "#fff", cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>אישור והוספה</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {uploadState === "error" && <Notice tone="error">{uploadError || "ניתוח הצילום נכשל."}</Notice>}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
-          <h3 className="text-sm font-semibold mb-1" style={{ color: "#f7f7fb" }}>תחומי עניין</h3>
-          <p className="text-xs mb-4" style={{ color: "#565968" }}>בחרו נושאים שתרצו לשמוע עליהם בפודקאסט.</p>
-
-          <div className="flex flex-wrap gap-2 mb-4">
-            {INTERESTS.map((interest) => {
-              const selected = selectedInterests.includes(interest.id);
-              return (
-                <button key={interest.id} onClick={() => toggleInterest(interest.id)} className="px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all" style={{ background: selected ? "rgba(123,111,245,0.15)" : "#181a26", color: selected ? "#7b6ff5" : "#9b9dae", border: `1px solid ${selected ? "rgba(123,111,245,0.3)" : "#292c3d"}`, cursor: "pointer" }}>
-                  {interest.label}
-                </button>
-              );
-            })}
-            {customInterests.map((ci) => (
-              <div key={ci} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm" style={{ background: "rgba(123,111,245,0.15)", color: "#7b6ff5", border: "1px solid rgba(123,111,245,0.3)" }}>
-                <span>{ci}</span>
-                <button onClick={() => removeCustomInterest(ci)} className="opacity-60 hover:opacity-100 transition-opacity" style={{ lineHeight: 0, background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ borderTop: "1px solid #292c3d", paddingTop: 14 }}>
-            <p className="text-xs mb-2" style={{ color: "#565968" }}>לא מצאתם תחום שמעניין אתכם? אפשר לחפש או להוסיף תחום עניין נוסף.</p>
-            <div style={{ position: "relative" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, height: 38, padding: "0 12px", borderRadius: 10, background: "#181a26", border: `1px solid ${interestFocused ? "rgba(123,111,245,0.4)" : "#292c3d"}`, transition: "border-color 0.2s" }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#565968" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-                <input
-                  value={interestInput}
-                  onChange={(e) => setInterestInput(e.target.value)}
-                  onFocus={() => setInterestFocused(true)}
-                  onBlur={() => setInterestFocused(false)}
-                  onKeyDown={(e) => { if (e.key === "Enter") addCustomInterest(); }}
-                  placeholder="חיפוש או הוספת תחום עניין"
-                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: "0.83rem", color: "#f7f7fb", fontFamily: "Heebo, sans-serif", direction: "rtl" }}
-                />
-                {interestInput.trim() && (
-                  <button onMouseDown={addCustomInterest} style={{ flexShrink: 0, padding: "2px 10px", borderRadius: 6, background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", color: "#fff", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>הוספה</button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {saved === "error" && <Notice tone="error">שמירת השינויים נכשלה.</Notice>}
-        <button onClick={save} disabled={saved === "saving"} className="px-6 h-10 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", cursor: saved === "saving" ? "not-allowed" : "pointer" }}>
-          {saved === "saving" ? "שומר…" : saved === "saved" ? "נשמר ✓" : "שמירת שינויים"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── HistoryScreen ────────────────────────────────────────────────────────────
+function PortfolioSettingsScreen({ holdings, interests, onSave, onNav, onSignOut, email, plan, schedule }: {
+  holdings: Holding[]; interests: string[]; onSave: (h: Holding[], interests: string[]) => Promise<void>;
+  onNav: (s: Screen) => void; onSignOut: () => void; email: string | null; plan: "daily" | "weekly";
+  schedule: Parameters<typeof SchedulePanel>[0];
+}) {
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  return <>
+    <TrackingPage holdings={holdings} interests={interests} onSave={onSave} onNav={onNav} onSignOut={onSignOut} email={email} plan={plan} onPreferences={() => setScheduleOpen(true)}/>
+    {scheduleOpen && <div style={{ position: "fixed", left: "max(12px, min(230px, calc(100vw - 332px)))", top: 80, width: "min(320px, calc(100vw - 24px))", maxHeight: "calc(100vh - 100px)", overflowY: "auto", zIndex: 60 }}>
+      <button autoFocus aria-label="סגירת הגדרות פודקאסט" onClick={() => setScheduleOpen(false)} style={{ position: "absolute", left: 12, top: 12, zIndex: 61, color: "#9b9dae", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+      <SchedulePanel {...schedule} inline onSave={async (data) => { await schedule.onSave(data); setScheduleOpen(false); }}/>
+    </div>}
+  </>;
+}
 
 function weekBucket(d: Date) {
   const diff = Date.now() - d.getTime();
@@ -2028,6 +1752,7 @@ function assetToHolding(a: Profile["assets"][number]): Holding {
 
 export function VestoryApp() {
   const [todayPreview, setTodayPreview] = useState(false);
+  const [trackingPreview, setTrackingPreview] = useState(false);
   const [screen, setScreen] = useState<Screen>("welcome");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -2055,9 +1780,26 @@ export function VestoryApp() {
     const isLocalPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname);
     const previewScreen = isLocalPreview ? query.get("preview") : null;
 
+    if (previewScreen === "tracking" || previewScreen === "tracking-empty") {
+      // Explicit localhost-only visual fixture; preview saves never touch Supabase.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTrackingPreview(true);
+      setProfile({
+        ...EMPTY_PROFILE, onboardingComplete: true,
+        assets: previewScreen === "tracking-empty" ? [] : [
+          {kind:"holding",symbol:"NVDA",name:"NVIDIA"}, {kind:"holding",symbol:"SPY",name:"S&P 500"},
+          {kind:"holding",symbol:"BTC",name:"ביטקוין"}, {kind:"holding",symbol:"AAPL",name:"Apple"},
+          {kind:"holding",symbol:"TASE:TEVA",name:"טבע"},
+        ],
+        interests: previewScreen === "tracking-empty" ? [] : ["AI","טכנולוגיה","קריפטו","כלכלת ישראל","שוק הנדל״ן","אנרגיה","ביוטק ופארמה"].map((label)=>({label})),
+      });
+      setScreen("settings-portfolio");
+      setLoading(false);
+      return;
+    }
+
     if (previewScreen === "today" || previewScreen === "today-empty") {
       // Explicit localhost-only QA fixture; never used for signed-in production data.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTodayPreview(true);
       setProfile({ ...EMPTY_PROFILE, onboardingComplete: true, assets: [{ kind: "holding", symbol: "SPY", name: "S&P 500" }, { kind: "holding", symbol: "QQQ", name: "Nasdaq 100" }, { kind: "watchlist", symbol: "SPXL", name: "Direxion Daily S&P 500" }, { kind: "watchlist", symbol: "TQQQ", name: "ProShares UltraPro QQQ" }], interests: [{ label: "AI" }] });
       if (previewScreen === "today") {
@@ -2169,17 +1911,19 @@ export function VestoryApp() {
   async function handleSaveHoldings(rows: Holding[], interests: string[]) {
     const watchlistAssets = profile.assets.filter((a) => a.kind === "watchlist");
     const holdingAssets: Profile["assets"] = rows.map((h) => ({ kind: "holding", name: h.name || h.ticker, symbol: h.ticker, quantity: h.quantity || null, averageCost: h.avgCost || null }));
-    await persistProfile({
+    const updated = {
       ...profile,
       assets: [...holdingAssets, ...watchlistAssets],
       interests: interests.map((label) => ({ label, custom: !INTERESTS.some((i) => i.id === label) })),
-    });
+    };
+    if (trackingPreview) setProfile(updated);
+    else await persistProfile(updated);
   }
 
   async function handleSaveSchedule(data: {
     podcastPlan: "daily" | "weekly"; scheduleTime: string; scheduleDay: number | null; notifyByEmail: boolean;
   }) {
-    await persistProfile({
+    const updated: Profile = {
       ...profile,
       targetMinutes: targetMinutesForPlan(data.podcastPlan),
       podcastPlan: data.podcastPlan,
@@ -2187,7 +1931,9 @@ export function VestoryApp() {
       scheduleDay: data.scheduleDay,
       scheduleTimezone: "Asia/Jerusalem",
       notifyByEmail: data.notifyByEmail,
-    });
+    };
+    if (trackingPreview) setProfile(updated);
+    else await persistProfile(updated);
   }
 
   if (loading) {
@@ -2206,7 +1952,7 @@ export function VestoryApp() {
 
   return (
     <div className="vestory-ui" style={{ minHeight: "100%", background: "#080910" }}>
-      {screen !== "dashboard" && <TopBar
+      {screen !== "dashboard" && screen !== "settings-portfolio" && <TopBar
         onNav={goTo}
         screen={screen}
         onSignOut={() => void handleSignOut()}
@@ -2274,12 +2020,17 @@ export function VestoryApp() {
           holdings={holdings}
           interests={profile.interests.map((i) => i.label)}
           onSave={handleSaveHoldings}
+          onNav={goTo}
+          onSignOut={() => void handleSignOut()}
+          email={profile.email}
+          plan={profile.podcastPlan}
+          schedule={{ podcastPlan: profile.podcastPlan, scheduleTime: profile.scheduleTime, scheduleDay: profile.scheduleDay, nextRunAt: profile.nextRunAt, notifyByEmail: profile.notifyByEmail, onSave: handleSaveSchedule }}
         />
       )}
       {screen === "history" && (
         <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} onPlay={(id) => playBrief(id)} />
       )}
-      <div className={screen === "dashboard" ? "today-legal-footer" : undefined}><LegalFooter /></div>
+      <div className={screen === "dashboard" || screen === "settings-portfolio" ? "today-legal-footer" : undefined}><LegalFooter /></div>
     </div>
   );
 }
