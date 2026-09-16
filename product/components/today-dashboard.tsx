@@ -7,7 +7,7 @@ import type { BriefView } from "@/lib/domain";
 import { podcastDisplayTitle } from "@/lib/podcast/display";
 import { Logo } from "@/components/logo";
 
-type Destination = "dashboard" | "settings-portfolio" | "settings-personalization" | "history" | "player" | "sources";
+type Destination = "dashboard" | "settings-portfolio" | "history" | "player" | "sources";
 type TrackedAsset = { id: string; ticker: string; name: string };
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
 const statusLabels: Record<BriefView["status"], string> = { queued: "בתור", researching: "אוספים מידע", scripting: "כותבים", synthesizing: "מכינים אודיו", completed: "מוכן להאזנה", failed: "היצירה לא הושלמה" };
@@ -16,9 +16,9 @@ function HeroArtwork() {
   return <div className="today-hero-art" aria-hidden="true"/>;
 }
 
-export function TodayDashboard({ assets, brief, player, email, plan, onNav, onSignOut, onGenerate, generating, canGenerate }: {
+export function TodayDashboard({ assets, brief, player, email, plan, onNav, onSignOut, onGenerate, generating, canGenerate, onPreferences }: {
   assets: TrackedAsset[]; brief: BriefView | null; player: ReactNode; email: string | null; plan: "daily" | "weekly";
-  onNav: (screen: Destination) => void; onSignOut: () => void; onGenerate: () => void; generating: boolean; canGenerate: boolean; preview?: boolean;
+  onNav: (screen: Destination) => void; onSignOut: () => void; onGenerate: () => void; generating: boolean; canGenerate: boolean; preview?: boolean; onPreferences: () => void;
 }) {
   const date = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Jerusalem" }).format(new Date());
   const personal = brief?.chapters.filter((chapter) => chapter.reasonKind !== "general") ?? [];
@@ -34,10 +34,10 @@ export function TodayDashboard({ assets, brief, player, email, plan, onNav, onSi
       <div className="today-brand" dir="ltr"><strong>VESTORY</strong><span dir="rtl">כל מה שחשוב להשקעות שלך</span></div>
       <nav>{[
         { id: "dashboard" as const, label: "היום", icon: Sun }, { id: "settings-portfolio" as const, label: "המעקב שלי", icon: BriefcaseBusiness },
-        { id: "settings-personalization" as const, label: "העדפות", icon: Settings2 }, { id: "history" as const, label: "היסטוריה", icon: History },
-      ].map(({ id, label, icon: Icon }) => <button key={id} className={id === "dashboard" ? "active" : ""} aria-current={id === "dashboard" ? "page" : undefined} onClick={() => onNav(id)}><Icon size={23}/><span>{label}</span></button>)}</nav>
+        { id: "preferences" as const, label: "העדפות", icon: Settings2 }, { id: "history" as const, label: "היסטוריה", icon: History },
+      ].map(({ id, label, icon: Icon }) => <button key={id} className={id === "dashboard" ? "active" : ""} aria-current={id === "dashboard" ? "page" : undefined} onClick={() => id === "preferences" ? onPreferences() : onNav(id)}><Icon size={23}/><span>{label}</span></button>)}</nav>
       <div className="today-sidebar-bottom">
-        <button className="today-account" onClick={() => onNav("settings-personalization")}><span className="today-avatar">{email?.[0]?.toUpperCase() ?? "V"}</span><span><strong>החשבון שלי</strong><small>{plan === "daily" ? "מסלול יומי" : "מסלול שבועי"}</small></span></button>
+        <button className="today-account" onClick={onPreferences}><span className="today-avatar">{email?.[0]?.toUpperCase() ?? "V"}</span><span><strong>החשבון שלי</strong><small>{plan === "daily" ? "מסלול יומי" : "מסלול שבועי"}</small></span></button>
         {email && <bdi className="today-email ph-mask-text" dir="ltr">{email}</bdi>}
         <button className="today-logout" onClick={onSignOut}><LogOut size={16}/>התנתקות</button>
         <div className="today-powered"><Logo size="lg"/><span>מניעים אותך קדימה</span></div>
