@@ -17,6 +17,20 @@ export async function GET(request: Request) {
       const dest = next && next.startsWith("/") ? next : "/vestory_app";
       return NextResponse.redirect(new URL(dest, request.url));
     }
+    console.error("[auth/callback] exchangeCodeForSession failed", error.message);
+  } else {
+    // Supabase redirects here with error/error_code/error_description (no
+    // code) when the upstream provider exchange itself failed — e.g. GitHub
+    // rejected the token exchange. Log it; the user only ever sees a
+    // generic message, this is the only place the real reason is visible.
+    const upstreamError = url.searchParams.get("error");
+    if (upstreamError) {
+      console.error("[auth/callback] upstream OAuth error", {
+        error: upstreamError,
+        error_code: url.searchParams.get("error_code"),
+        error_description: url.searchParams.get("error_description"),
+      });
+    }
   }
   return NextResponse.redirect(new URL("/login?error=auth_callback_failed", request.url));
 }
