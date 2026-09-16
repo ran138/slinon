@@ -5,6 +5,7 @@ import type { CSSProperties, DragEvent, MouseEvent as ReactMouseEvent } from "re
 import type { BriefView, ProfileUpdate } from "@/lib/domain";
 import { Notice } from "@/components/notice";
 import { Logo } from "@/components/logo";
+import { VestoryWordmark } from "@/components/vestory-wordmark";
 import { initAnalytics, identifyUser, resetAnalytics } from "@/lib/analytics";
 import { LegalFooter } from "@/components/legal/footer";
 import { INTERESTS, POPULAR_ASSETS, conceptKey, matchAsset, matchInterest, normalizeInterests, searchAssets, searchInterests } from "@/lib/onboarding";
@@ -48,6 +49,10 @@ function clamp(v: number, min: number, max: number) {
   return Math.min(Math.max(v, min), max);
 }
 
+function formatBriefTimestamp(iso: string) {
+  return new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+}
+
 function fmtMs(ms?: number | null) {
   return formatSeconds((ms ?? 0) / 1000);
 }
@@ -61,7 +66,7 @@ function TopBar({ onNav, screen, onSignOut }: { onNav: (s: Screen) => void; scre
     <header className="sticky top-0 z-50" style={{ borderBottom: "1px solid #292c3d", background: "rgba(9,10,17,0.92)", backdropFilter: "blur(18px)" }}>
       <div className="max-w-5xl mx-auto px-6 h-14 relative flex items-center justify-between">
         <button onClick={() => onNav("dashboard")} className="flex items-center gap-2.5 group" style={{ background: "none", border: "none", cursor: "pointer" }}>
-          <span className="font-bold text-sm" style={{ color: "#f7f7fb" }}>VESTORY</span>
+          <VestoryWordmark size="sm" />
         </button>
         <nav className="absolute flex items-center gap-1" style={{ left: "50%", transform: "translateX(-50%)" }}>
           {[
@@ -146,9 +151,7 @@ function WelcomeScreen({ onNext }: { onNext: () => void }) {
 
       <div className="relative z-10 flex flex-col items-center w-full max-w-[500px] text-center" style={{ gap: "1.5rem" }}>
         <div className="flex flex-col items-center" style={{ gap: "0.75rem" }}>
-          <h1 style={{ fontSize: "clamp(2.75rem, 7vw, 3.75rem)", fontWeight: 800, letterSpacing: "-0.025em", lineHeight: 1, background: "linear-gradient(145deg, #f0f0f5 20%, #c4bdff 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-            VESTORY
-          </h1>
+          <h1 style={{ margin: 0 }}><VestoryWordmark size="lg" /></h1>
           <div className="flex items-center justify-center" style={{ gap: "0.55rem", direction: "ltr", isolation: "isolate" }}>
             <span style={{ color: "#8a8aaa", fontSize: "0.82rem", fontWeight: 500, letterSpacing: "0.03em" }}>by</span>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1234,7 +1237,7 @@ function DashboardScreen({ holdings, brief, onNav, onPlay, onGenerate, generatin
                   <div>
                     <div className="flex items-center gap-2 mb-2.5">
                       <div className="px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider" style={{ background: "rgba(52,211,153,0.15)", color: "#34d399" }}>חדש</div>
-                      <span className="text-xs" style={{ color: "#565968" }}>{new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit" }).format(new Date(brief.createdAt))}</span>
+                      <span className="text-xs" style={{ color: "#565968", direction: "rtl", unicodeBidi: "isolate" }}>{formatBriefTimestamp(brief.createdAt)}</span>
                     </div>
                     <h2 className="text-xl font-bold leading-snug" style={{ color: "#f7f7fb" }}>{brief.title || "הפודקאסט של היום"}</h2>
                     <p className="text-sm mt-1" style={{ color: "#9b9dae" }}>{formatSeconds(totalDuration / 1000)} · {brief.chapters.length} נושאים</p>
@@ -1410,7 +1413,7 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
           <div>
             <div className="mb-6">
               <h1 className="text-2xl font-bold" style={{ color: "#f7f7fb" }}>{brief.title || `הפודקאסט של ${new Date(brief.createdAt).toLocaleDateString("he-IL", { day: "numeric", month: "long" })}`}</h1>
-              <p className="text-sm mt-1" style={{ color: "#9b9dae" }}>{formatSeconds(totalDuration / 1000)} · {brief.chapters.length} נושאים</p>
+              <p className="text-sm mt-1" style={{ color: "#9b9dae" }}><span style={{ direction: "rtl", unicodeBidi: "isolate" }}>{formatBriefTimestamp(brief.createdAt)}</span> · {formatSeconds(totalDuration / 1000)} · {brief.chapters.length} נושאים</p>
             </div>
 
             <div className="rounded-2xl p-6 mb-5 relative overflow-hidden" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
@@ -2115,6 +2118,8 @@ function HistoryScreen({ briefs, onOpen, onPlay }: { briefs: BriefView[]; onOpen
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p className="font-semibold" style={{ fontSize: "0.92rem", color: "#f7f7fb", margin: 0 }}>{b.title || `הפודקאסט של ${new Date(b.createdAt).toLocaleDateString("he-IL", { day: "numeric", month: "long" })}`}</p>
                             <div className="flex items-center gap-2 mt-0.5" style={{ direction: "ltr", justifyContent: "flex-end" }}>
+                              <span style={{ fontSize: "0.72rem", color: "#565968", direction: "rtl", unicodeBidi: "isolate" }}>{formatBriefTimestamp(b.createdAt)}</span>
+                              <span style={{ fontSize: "0.65rem", color: "#565968" }}>·</span>
                               <span style={{ fontSize: "0.72rem", color: "#565968", fontFamily: "JetBrains Mono, monospace" }}>{formatSeconds(dur / 1000)}</span>
                               <span style={{ fontSize: "0.65rem", color: "#565968" }}>·</span>
                               <span style={{ fontSize: "0.72rem", color: "#565968" }}>{b.chapters.length} נושאים</span>

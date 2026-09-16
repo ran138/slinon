@@ -1,4 +1,4 @@
-import { Logo } from "@/components/logo";
+import { VestoryWordmark } from "@/components/vestory-wordmark";
 import { LegalFooter } from "@/components/legal/footer";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -9,7 +9,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     >
       <div style={{ width: "100%", maxWidth: 380, display: "flex", flexDirection: "column", gap: 24 }}>
         <div style={{ display: "flex", justifyContent: "center" }}>
-          <Logo size="md" />
+          <VestoryWordmark size="md" />
         </div>
         <div
           style={{
