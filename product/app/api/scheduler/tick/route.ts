@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 import { assertSupabase, getSupabaseAdmin } from "@/db";
-import { createBrief } from "@/lib/briefs";
+import { createBrief, sendDueNotifications } from "@/lib/briefs";
 import { computeNextRunAt, type PodcastPlan } from "@/lib/schedule";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
-// Sized for the external trigger cadence (a GitHub Actions workflow polls
-// this route every ~10 min, see .github/workflows/Podcast_Scheduler.yml) —
-// large enough to cover typical generation time (observed: ~1.5-4.5 min) so
-// the episode is usually ready by the user's chosen time, small enough that
-// generation doesn't start needlessly early. Was 20 min, sized instead for
-// vercel.json's now-fallback-only once-daily cron, which needed a much wider
-// window to ever catch a due user at all.
-const GENERATION_LEAD_MS = 10 * 60 * 1000;
+// Generation starts this far before the user's chosen delivery time — early
+// is better than late, and generation is fast (observed: ~1.5-4.5 min), so
+// this is mostly slack. The ready email is deliberately NOT sent as soon as
+// generation finishes; it's held until NOTIFY_LEAD_MS before the target
+// instead (see sendDueNotifications), so a fast generation doesn't result in
+// an email arriving oddly early.
+const GENERATION_LEAD_MS = 20 * 60 * 1000;
+const NOTIFY_LEAD_MS = 10 * 60 * 1000;
 
 type DueRow = {
   user_id: string;
@@ -85,7 +85,8 @@ async function tick(request: Request) {
     }
 
     try {
-      const briefId = await createBrief(row.user_id);
+      const notifyAt = new Date(dueAt.getTime() - NOTIFY_LEAD_MS).toISOString();
+      const briefId = await createBrief(row.user_id, notifyAt);
       results.push({ userId: row.user_id, status: "started", briefId });
     } catch (error) {
       const message = error instanceof Error ? error.message : "generation_failed";
@@ -93,5 +94,7 @@ async function tick(request: Request) {
     }
   }
 
-  return NextResponse.json({ processed: results.length, results });
+  const notified = await sendDueNotifications();
+
+  return NextResponse.json({ processed: results.length, results, notified });
 }
