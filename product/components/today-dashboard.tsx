@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import type { ReactNode, RefObject } from "react";
-import { Sun, BriefcaseBusiness, Settings2, History, LogOut, Sparkles, ArrowLeft, Download, Share2, Play, Pause, Newspaper, AudioLines, FileText, Quote, ArrowUpRight } from "lucide-react";
+import { BriefcaseBusiness, Sparkles, ArrowLeft, Download, Share2, Play, Pause, Newspaper, AudioLines, FileText, Quote, ArrowUpRight } from "lucide-react";
 import type { BriefView } from "@/lib/domain";
 import { podcastDisplayTitle } from "@/lib/podcast/display";
-import { Logo } from "@/components/logo";
+import { AppSidebar } from "@/components/app-sidebar";
 
 type Destination = "dashboard" | "settings-portfolio" | "history" | "player" | "sources";
 type TrackedAsset = { id: string; ticker: string; name: string };
@@ -30,19 +30,7 @@ export function TodayDashboard({ assets, brief, player, email, plan, onNav, onSi
     { icon: FileText, title: "מידע מבוסס מקורות", text: brief?.sources.length ? `${brief.sources.length} מקורות לפודקאסט, עם קישורים לקריאה נוספת.` : "קישורים למקורות יופיעו לצד התוכן כשיהיו זמינים.", action: "sources" as const },
   ];
   return <div className="today-shell" dir="ltr">
-    <aside className="today-sidebar" dir="rtl" aria-label="ניווט ראשי">
-      <div className="today-brand" dir="ltr"><strong>VESTORY</strong><span dir="rtl">כל מה שחשוב להשקעות שלך</span></div>
-      <nav>{[
-        { id: "dashboard" as const, label: "היום", icon: Sun }, { id: "settings-portfolio" as const, label: "המעקב שלי", icon: BriefcaseBusiness },
-        { id: "preferences" as const, label: "העדפות", icon: Settings2 }, { id: "history" as const, label: "היסטוריה", icon: History },
-      ].map(({ id, label, icon: Icon }) => <button key={id} className={id === "dashboard" ? "active" : ""} aria-current={id === "dashboard" ? "page" : undefined} onClick={() => id === "preferences" ? onPreferences() : onNav(id)}><Icon size={23}/><span>{label}</span></button>)}</nav>
-      <div className="today-sidebar-bottom">
-        <button className="today-account" onClick={onPreferences}><span className="today-avatar">{email?.[0]?.toUpperCase() ?? "V"}</span><span><strong>החשבון שלי</strong><small>{plan === "daily" ? "מסלול יומי" : "מסלול שבועי"}</small></span></button>
-        {email && <bdi className="today-email ph-mask-text" dir="ltr">{email}</bdi>}
-        <button className="today-logout" onClick={onSignOut}><LogOut size={16}/>התנתקות</button>
-        <div className="today-powered"><Logo size="lg"/><span>מניעים אותך קדימה</span></div>
-      </div>
-    </aside>
+    <AppSidebar active="dashboard" email={email} plan={plan} onNav={onNav} onPreferences={onPreferences} onSignOut={onSignOut}/>
     <main className="today-content" dir="rtl">
       {/* The explicit localhost preview uses QA fixtures; no debug copy is rendered. */}
       <section className="today-hero" aria-labelledby="today-greeting"><HeroArtwork/>
