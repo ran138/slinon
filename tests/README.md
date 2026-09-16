@@ -24,7 +24,13 @@ Git configuration, or existing tests.
 
 ## Run
 
-From the repository root:
+From the product directory:
+
+```bash
+npm test
+```
+
+Or directly from the repository root:
 
 ```bash
 ./product/node_modules/.bin/vitest run --config tests/vitest.config.ts
@@ -36,8 +42,8 @@ require the relevant local services or provider credentials.
 
 ## Latest run
 
-- 526 tests collected
-- 526 tests passed
+- 536 tests collected
+- 536 tests passed
 - 0 assertions failed
 - The OAuth redirect and multi-word interest parsing defects were fixed
 

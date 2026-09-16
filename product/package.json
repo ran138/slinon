@@ -11,7 +11,7 @@
     "build": "vite build",
     "build:next": "next build",
     "start": "next start --hostname 127.0.0.1 --port 5175",
-    "test": "vitest run --config vitest.config.ts --exclude '**/*.integration.test.ts'",
+    "test": "cd .. && ./product/node_modules/.bin/vitest run --config tests/vitest.config.ts",
     "test:integration": "node --env-file=.env.ingestion.local node_modules/vitest/vitest.mjs run tests/provider-quota.integration.test.ts tests/knowledge-chunks.integration.test.ts tests/knowledge-pipeline.integration.test.ts --config vitest.config.ts",
     "test:providers-live": "RUN_LIVE_PROVIDER_TESTS=1 node --env-file=.env.ingestion.local node_modules/vitest/vitest.mjs run tests/providers-live.integration.test.ts --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts",
