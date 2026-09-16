@@ -7,6 +7,7 @@ import { Notice } from "@/components/notice";
 import { Logo } from "@/components/logo";
 import { initAnalytics, identifyUser, resetAnalytics } from "@/lib/analytics";
 import { LegalFooter } from "@/components/legal/footer";
+import { INTERESTS, POPULAR_ASSETS, conceptKey, matchAsset, matchInterest, normalizeInterests, searchAssets, searchInterests } from "@/lib/onboarding";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,21 +35,6 @@ interface WatchItem {
   ticker: string;
   name: string;
 }
-
-const INTERESTS = [
-  { id: "טכנולוגיה", label: "טכנולוגיה" },
-  { id: "AI", label: "AI" },
-  { id: "קריפטו", label: "קריפטו" },
-  { id: "ריבית ואינפלציה", label: "ריבית ואינפלציה" },
-  { id: "כלכלת ישראל", label: "כלכלת ישראל" },
-  { id: "כלכלה עולמית", label: "כלכלה עולמית" },
-  { id: "שוק הנדל״ן", label: "שוק הנדל״ן" },
-  { id: "אנרגיה", label: "אנרגיה" },
-  { id: "מט\"ח", label: "מט\"ח" },
-  { id: "אג\"ח", label: "אג\"ח" },
-  { id: "ביוטק ופארמה", label: "ביוטק ופארמה" },
-  { id: "שבבים", label: "שבבים" },
-];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -245,36 +231,6 @@ function WelcomeScreen({ onNext }: { onNext: () => void }) {
 
 // ─── Popular assets catalog ────────────────────────────────────────────────────
 
-const POPULAR_ASSETS: { ticker: string; name: string; nameHe?: string; secNum?: string }[] = [
-  { ticker: "NVDA", name: "NVIDIA", nameHe: "אנבידיה" },
-  { ticker: "AAPL", name: "Apple", nameHe: "אפל" },
-  { ticker: "MSFT", name: "Microsoft", nameHe: "מיקרוסופט" },
-  { ticker: "TSLA", name: "Tesla", nameHe: "טסלה" },
-  { ticker: "META", name: "Meta", nameHe: "מטא" },
-  { ticker: "AMZN", name: "Amazon", nameHe: "אמזון" },
-  { ticker: "GOOGL", name: "Alphabet (Google)", nameHe: "אלפבית" },
-  { ticker: "AMD", name: "AMD" },
-  { ticker: "INTC", name: "Intel", nameHe: "אינטל" },
-  { ticker: "NFLX", name: "Netflix", nameHe: "נטפליקס" },
-  { ticker: "ORCL", name: "Oracle" },
-  { ticker: "CRM", name: "Salesforce" },
-  { ticker: "ADBE", name: "Adobe" },
-  { ticker: "PLTR", name: "Palantir" },
-  { ticker: "COIN", name: "Coinbase" },
-  { ticker: "SPY", name: "S&P 500 ETF (SPY)" },
-  { ticker: "QQQ", name: "Nasdaq 100 ETF (QQQ)" },
-  { ticker: "VOO", name: "Vanguard S&P 500 (VOO)" },
-  { ticker: "BTC", name: "Bitcoin", nameHe: "ביטקוין" },
-  { ticker: "ETH", name: "Ethereum", nameHe: "אתריום" },
-  { ticker: "SOL", name: "Solana" },
-  { ticker: "TASE:NICE", name: "Nice Systems", nameHe: "נייס סיסטמס", secNum: "1122127" },
-  { ticker: "TASE:FIBI", name: "First International Bank", nameHe: "בנק הפועלים הבינלאומי", secNum: "604611" },
-  { ticker: "TASE:TEVA", name: "Teva", nameHe: "טבע", secNum: "1120300" },
-  { ticker: "TASE:CHKP", name: "Check Point", nameHe: "צ'ק פוינט", secNum: "1084761" },
-  { ticker: "TASE:WIXL", name: "Wix", nameHe: "ויקס", secNum: "1141783" },
-  { ticker: "TASE:MNDY", name: "Monday.com", nameHe: "מאנדיי", secNum: "1201605" },
-];
-
 const INITIAL_POPULAR = POPULAR_ASSETS.slice(0, 6);
 
 // ─── Portfolio entry draft (persists through back navigation, in-memory only) ─
@@ -293,7 +249,7 @@ interface PortfolioDraft {
 function PortfolioEntryScreen({
   onNext, onBack, draft, onDraftChange,
 }: {
-  onNext: (holdings: Holding[], interests: string[]) => Promise<void>;
+  onNext: (holdings: Holding[], interests: string[], source: string) => Promise<void>;
   onBack: () => void;
   draft: PortfolioDraft;
   onDraftChange: (d: PortfolioDraft) => void;
@@ -331,12 +287,8 @@ function PortfolioEntryScreen({
     }
   }, [freeText]);
 
-  const searchResults = searchQuery.trim().length > 0
-    ? POPULAR_ASSETS.filter((a) => {
-        const q = searchQuery.toLowerCase();
-        return a.ticker.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || a.nameHe?.includes(searchQuery) || a.secNum?.includes(searchQuery);
-      }).slice(0, 8)
-    : [];
+  const searchResults = searchAssets(searchQuery);
+  const interestResults = searchInterests(customInput);
 
   const visiblePopular = showAll ? POPULAR_ASSETS : INITIAL_POPULAR;
 
@@ -354,10 +306,11 @@ function PortfolioEntryScreen({
   }
 
   function addCustomInterest() {
-    const value = customInput.trim();
-    if (value && !customInterests.some((item) => item.toLocaleLowerCase() === value.toLocaleLowerCase())) {
+    const value = matchInterest(customInput) ?? customInput.trim();
+    if (value && ![...selectedInterests, ...customInterests].some((item) => conceptKey(item) === conceptKey(value))) {
       setValidationAttempted(false);
-      setCustomInterests((prev) => [...prev, value]);
+      if (INTERESTS.some((item) => item.id === value)) setSelectedInterests((prev) => [...prev, value]);
+      else setCustomInterests((prev) => [...prev, value]);
     }
     setCustomInput("");
     setShowCustomInput(false);
@@ -443,11 +396,14 @@ function PortfolioEntryScreen({
         ? detectedAssets.filter((a) => !parsedTickers.has(a.ticker.toLocaleUpperCase()) && !fromPicked.some((p) => p.ticker.toLocaleUpperCase() === a.ticker.toLocaleUpperCase())).map((a, i) => ({ id: `sc-${i}`, ticker: a.ticker, name: a.name, quantity: "", avgCost: "" }))
         : [];
 
-      const all = [...fromText, ...fromPicked, ...fromScreenshot];
-      const allInterests = Array.from(new Map(
-        [...selectedInterests, ...customInterests, ...fromTextInterests].map((value) => [value.toLocaleLowerCase(), value]),
-      ).values());
-      await onNext(all, allInterests);
+      const all = Array.from(new Map([...fromText, ...fromPicked, ...fromScreenshot].map((holding) => {
+        const known = matchAsset(holding.ticker, false) ?? matchAsset(holding.name, false);
+        const row = known ? { ...holding, ticker: known.ticker, name: known.name } : holding;
+        return [conceptKey(row.ticker), row];
+      })).values());
+      const allInterests = normalizeInterests([...selectedInterests, ...customInterests, ...fromTextInterests])
+        .filter((label) => !all.some((asset) => conceptKey(asset.name) === conceptKey(label) || matchAsset(label, false)?.ticker === asset.ticker));
+      await onNext(all, allInterests, JSON.stringify({ freeText, pickedAssets, confirmedScreenshot, detectedAssets, selectedInterests, customInterests }));
     } catch (e) {
       setContinueError(e instanceof Error ? e.message : "לא הצלחנו לזהות את הנכסים והנושאים.");
     } finally {
@@ -723,14 +679,22 @@ function PortfolioEntryScreen({
 
             {showCustomInput ? (
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 12px", borderRadius: 10, background: "rgba(91,138,240,0.07)", border: "1px solid rgba(91,138,240,0.22)", marginBottom: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                 <input
                   autoFocus
+                  aria-label="חיפוש או הוספת תחום עניין"
+                  maxLength={80}
+                  dir="auto"
                   value={customInput}
                   onChange={(e) => setCustomInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") addCustomInterest(); if (e.key === "Escape") setShowCustomInput(false); }}
                   placeholder="לדוגמה: OpenAI, רובוטיקה, SpaceX"
-                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: "0.85rem", color: "#d0d0ee", fontFamily: "Heebo, sans-serif", direction: "rtl", caretColor: "#7b6ff5" }}
+                  style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: "0.85rem", color: "#d0d0ee", fontFamily: "Heebo, sans-serif", caretColor: "#7b6ff5" }}
                 />
+                {interestResults.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                  {interestResults.map((item) => <button key={item.id} onClick={() => { setSelectedInterests((prev) => prev.includes(item.id) ? prev : [...prev, item.id]); setCustomInput(""); setShowCustomInput(false); setValidationAttempted(false); }} style={{ padding: "4px 8px", borderRadius: 8, background: "rgba(123,111,245,0.15)", color: "#b0a8ff", border: "1px solid rgba(123,111,245,0.3)", cursor: "pointer" }}><bdi dir="auto">{item.label}</bdi></button>)}
+                </div>}
+                </div>
                 <button onClick={addCustomInterest} style={{ padding: "3px 12px", borderRadius: 7, background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", color: "#fff", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "Heebo, sans-serif", flexShrink: 0 }}>הוספה</button>
                 <button onClick={() => setShowCustomInput(false)} style={{ background: "none", border: "none", color: "#484868", cursor: "pointer", fontSize: "0.78rem", fontFamily: "Heebo, sans-serif", flexShrink: 0 }}>ביטול</button>
               </div>
@@ -789,14 +753,17 @@ function PortfolioEntryScreen({
 // ─── PortfolioConfirmScreen ───────────────────────────────────────────────────
 
 interface ConfirmRow {
-  id: string; ticker: string; name: string; quantity: string; value: string; editing: boolean;
+  id: string; kind: "asset" | "interest"; ticker: string; name: string; quantity: string; value: string; editing: boolean;
 }
 
-function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holding[]; onNext: (rows: Holding[]) => void; onBack: () => void }) {
-  const seed: ConfirmRow[] = (holdings.length > 0 ? holdings : [{ id: "demo", ticker: "NVDA", name: "NVIDIA", quantity: "", avgCost: "" }]).map((h) => ({
-    id: h.id, ticker: h.ticker, name: h.name || h.ticker, quantity: h.quantity ?? "", value: h.avgCost ?? "", editing: false,
-  }));
+function PortfolioConfirmScreen({ holdings, interests, onNext, onBack }: { holdings: Holding[]; interests: string[]; onNext: (rows: Holding[], topics: string[]) => Promise<void>; onBack: (rows: Holding[], topics: string[]) => void }) {
+  const seed: ConfirmRow[] = [
+    ...holdings.map((h): ConfirmRow => ({ id: h.id, kind: "asset", ticker: h.ticker, name: h.name || h.ticker, quantity: h.quantity ?? "", value: h.avgCost ?? "", editing: false })),
+    ...normalizeInterests(interests).map((name, i): ConfirmRow => ({ id: `interest-${i}`, kind: "interest", ticker: "", name, quantity: "", value: "", editing: false })),
+  ];
   const [rows, setRows] = useState<ConfirmRow[]>(seed);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   function remove(id: string) { setRows((r) => r.filter((x) => x.id !== id)); }
   function toggleEdit(id: string) { setRows((r) => r.map((x) => (x.id === id ? { ...x, editing: !x.editing } : x))); }
@@ -804,7 +771,17 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
     setRows((r) => r.map((x) => (x.id === id ? { ...x, [field]: val } : x)));
   }
 
-  const canContinue = rows.length > 0;
+  function confirmedData() {
+    const assets = Array.from(new Map(rows.filter((row) => row.kind === "asset").map((r) => {
+      const known = matchAsset(r.ticker, false) ?? matchAsset(r.name, false);
+      const asset = { id: r.id, ticker: known?.ticker ?? r.ticker.trim().toUpperCase(), name: r.name.trim(), quantity: r.quantity, avgCost: r.value };
+      return [conceptKey(asset.ticker), asset];
+    })).values());
+    const topics = normalizeInterests(rows.filter((row) => row.kind === "interest").map((row) => row.name))
+      .filter((label) => !assets.some((asset) => conceptKey(asset.name) === conceptKey(label) || matchAsset(label, false)?.ticker === asset.ticker));
+    return { assets, topics };
+  }
+  const canContinue = rows.length > 0 && rows.every((row) => row.name.trim() && (row.kind === "interest" || row.ticker.trim())) && !busy;
   const accentLine = <div style={{ height: 1, background: "linear-gradient(90deg, transparent 5%, #7b6ff5 38%, #5b8af0 62%, transparent 95%)" }} />;
 
   return (
@@ -812,14 +789,14 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
       <div className="absolute pointer-events-none" style={{ width: 620, height: 520, top: "44%", left: "50%", transform: "translate(-50%, -50%)", background: "radial-gradient(ellipse 55% 55% at 50% 48%, rgba(100,88,230,0.13) 0%, rgba(80,120,240,0.06) 50%, transparent 72%)" }} />
 
       <div className="relative z-10 w-full max-w-[540px]" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <h2 style={{ fontSize: "1.65rem", fontWeight: 700, color: "#eeeef2", letterSpacing: "-0.02em", margin: 0 }}>זה מה שהבנו מהתיק שלך</h2>
-          <p style={{ fontSize: "0.92rem", lineHeight: 1.6, color: "#a0a0bc", margin: 0 }}>בדקו שהנכסים זוהו נכון. אם משהו לא מדויק, אפשר לתקן לפני שממשיכים.</p>
+        <div dir="rtl" style={{ display: "flex", flexDirection: "column", gap: 6, textAlign: "right" }}>
+          <h2 style={{ fontSize: "1.65rem", fontWeight: 700, color: "#eeeef2", letterSpacing: "-0.02em", margin: 0 }}>זה מה שהבנו שמעניין אתכם</h2>
+          <p style={{ fontSize: "0.92rem", lineHeight: 1.6, color: "#a0a0bc", margin: 0 }}>בדקו שהנכסים והנושאים שזיהינו נכונים. כך <bdi dir="ltr">Vestory</bdi> ידע על מה לחפש ולהתמקד כשיכין עבורכם את הפודקאסט.</p>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {rows.map((row) => {
-            const initials = row.ticker.replace(/[^A-Z]/g, "").slice(0, 2) || row.ticker.slice(0, 2).toUpperCase();
+            const initials = row.kind === "interest" ? "#" : row.ticker.replace(/[^A-Z]/g, "").slice(0, 2) || row.ticker.slice(0, 2).toUpperCase();
             return (
               <div key={row.id} style={{ borderRadius: 16, overflow: "hidden", background: "linear-gradient(155deg, rgba(26,26,40,0.97) 0%, rgba(18,18,30,0.98) 100%)", border: "1px solid rgba(123,111,245,0.18)", boxShadow: "0 0 0 1px rgba(255,255,255,0.03) inset, 0 4px 24px rgba(0,0,0,0.35)" }}>
                 {accentLine}
@@ -829,9 +806,10 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#dcdcee" }}>{row.name}</span>
-                      {row.ticker !== "?" && <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#9d94f7", direction: "ltr", fontFamily: "JetBrains Mono, monospace", background: "rgba(123,111,245,0.12)", border: "1px solid rgba(123,111,245,0.22)", padding: "1px 7px", borderRadius: 6 }}>{row.ticker}</span>}
+                      <bdi dir="auto" style={{ fontSize: "0.95rem", fontWeight: 700, color: "#dcdcee", overflowWrap: "anywhere" }}>{row.name}</bdi>
+                      {row.kind === "asset" && row.ticker !== "?" && <bdi dir="ltr" style={{ fontSize: "0.7rem", fontWeight: 700, color: "#9d94f7", fontFamily: "JetBrains Mono, monospace", background: "rgba(123,111,245,0.12)", border: "1px solid rgba(123,111,245,0.22)", padding: "1px 7px", borderRadius: 6 }}>{row.ticker}</bdi>}
                     </div>
+                    <span style={{ fontSize: "0.65rem", color: "#9090b0" }}>{row.kind === "asset" ? "נכס" : INTERESTS.some((item) => item.id === row.name) ? "תחום עניין" : "נושא אישי"}</span>
                     {(row.quantity || row.value) && !row.editing && (
                       <div style={{ display: "flex", gap: 12, marginTop: 3 }}>
                         {row.quantity && <span className="ph-mask-text" style={{ fontSize: "0.75rem", color: "#686888" }}>כמות: {row.quantity}</span>}
@@ -840,10 +818,10 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
                     )}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                    <button onClick={() => toggleEdit(row.id)} style={{ padding: "4px 12px", borderRadius: 8, fontSize: "0.75rem", fontWeight: 600, background: row.editing ? "rgba(123,111,245,0.18)" : "rgba(255,255,255,0.05)", border: `1px solid ${row.editing ? "rgba(123,111,245,0.35)" : "rgba(255,255,255,0.1)"}`, color: row.editing ? "#9d94f7" : "#707090", cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>
+                    <button aria-label={`${row.editing ? "סיום עריכת" : "עריכת"} ${row.name}`} onClick={() => toggleEdit(row.id)} style={{ padding: "4px 12px", borderRadius: 8, fontSize: "0.75rem", fontWeight: 600, background: row.editing ? "rgba(123,111,245,0.18)" : "rgba(255,255,255,0.05)", border: `1px solid ${row.editing ? "rgba(123,111,245,0.35)" : "rgba(255,255,255,0.1)"}`, color: row.editing ? "#9d94f7" : "#707090", cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>
                       {row.editing ? "סיום" : "עריכה"}
                     </button>
-                    <button onClick={() => remove(row.id)} style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: "rgba(248,113,113,0.05)", border: "1px solid rgba(248,113,113,0.1)", color: "#583838", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <button aria-label={`הסרת ${row.name}`} onClick={() => remove(row.id)} style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: "rgba(248,113,113,0.05)", border: "1px solid rgba(248,113,113,0.1)", color: "#583838", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                     </button>
                   </div>
@@ -851,21 +829,24 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
 
                 {row.editing && (
                   <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "12px 16px 14px", direction: "rtl" }}>
-                    <p style={{ fontSize: "0.72rem", color: "#585878", marginBottom: 12 }}>ניתן לתקן את שם הנכס, הסימבול, הכמות או השווי.</p>
+                    <p style={{ fontSize: "0.72rem", color: "#9090b0", marginBottom: 12 }}>{row.kind === "asset" ? "ניתן לתקן את שם הנכס, הסימבול, הכמות או השווי." : "ניתן לתקן את הנושא שמעניין אתכם."}</p>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                       {[
-                        { label: "שם הנכס", field: "name" as const, placeholder: "NVIDIA", dir: "rtl" },
+                        { label: row.kind === "asset" ? "שם הנכס" : "שם הנושא", field: "name" as const, placeholder: row.kind === "asset" ? "NVIDIA" : "נושא שמעניין אתכם", dir: "auto" },
                         { label: "סימבול", field: "ticker" as const, placeholder: "NVDA", dir: "ltr" },
                         { label: "כמות", field: "quantity" as const, placeholder: "10", dir: "ltr" },
                         { label: "שווי", field: "value" as const, placeholder: "₪20,000", dir: "ltr" },
-                      ].map(({ label, field, placeholder, dir }) => (
+                      ].filter(({ field }) => row.kind === "asset" || field === "name").map(({ label, field, placeholder, dir }) => (
                         <div key={field} style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.08)" }}>
                           <label style={{ fontSize: "0.64rem", color: "#484868", display: "block", marginBottom: 4, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em" }}>{label}</label>
                           <input
+                            aria-label={`${label} ${row.id}`}
+                            maxLength={field === "name" ? row.kind === "interest" ? 80 : 100 : field === "ticker" ? 20 : 30}
+                            dir={dir}
                             value={field === "ticker" ? row.ticker : field === "name" ? row.name : field === "quantity" ? row.quantity : row.value}
                             onChange={(e) => updateField(row.id, field, e.target.value)}
                             placeholder={placeholder}
-                            style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: "0.85rem", color: "#d0d0e8", caretColor: "#7b6ff5", fontFamily: field === "ticker" ? "JetBrains Mono, monospace" : "Heebo, sans-serif", direction: dir as "ltr" | "rtl" }}
+                            style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: "0.85rem", color: "#d0d0e8", caretColor: "#7b6ff5", fontFamily: field === "ticker" ? "JetBrains Mono, monospace" : "Heebo, sans-serif" }}
                           />
                         </div>
                       ))}
@@ -879,13 +860,13 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
 
         {rows.length === 0 && (
           <div style={{ padding: "14px 16px", borderRadius: 12, background: "rgba(248,113,113,0.05)", border: "1px solid rgba(248,113,113,0.15)", textAlign: "center" }}>
-            <p style={{ fontSize: "0.82rem", color: "#a07070", margin: 0 }}>כל הנכסים הוסרו — חזרה לעריכה כדי להוסיף נכסים.</p>
+            <p style={{ fontSize: "0.82rem", color: "#a07070", margin: 0 }}>כל הפריטים הוסרו — חזרו לעריכה כדי להוסיף נכסים או נושאים.</p>
           </div>
         )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <button
-            onClick={() => onNext(rows.map((r) => ({ id: r.id, ticker: r.ticker, name: r.name, quantity: r.quantity, avgCost: r.value })))}
+            onClick={async () => { const { assets, topics } = confirmedData(); setBusy(true); setError(""); try { await onNext(assets, topics); } catch (e) { setError(e instanceof Error ? e.message : "שמירת הפרופיל נכשלה."); } finally { setBusy(false); } }}
             disabled={!canContinue}
             className="relative overflow-hidden group transition-all active:scale-[0.98]"
             style={{
@@ -897,9 +878,10 @@ function PortfolioConfirmScreen({ holdings, onNext, onBack }: { holdings: Holdin
               cursor: canContinue ? "pointer" : "not-allowed", transition: "all 0.25s",
             }}
           >
-            <span className="relative">אישור והמשך</span>
+            <span className="relative">{busy ? "שומרים…" : "אישור והמשך"}</span>
           </button>
-          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", color: "#505070", fontFamily: "Heebo, sans-serif", padding: "4px 0" }}>חזרה לעריכה</button>
+          {error && <Notice tone="error">{error}</Notice>}
+          <button disabled={busy} onClick={() => { const { assets, topics } = confirmedData(); onBack(assets, topics); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", color: "#505070", fontFamily: "Heebo, sans-serif", padding: "4px 0" }}>חזרה לעריכה</button>
         </div>
       </div>
     </div>
@@ -2190,6 +2172,7 @@ export function VestoryApp() {
 
   const [onboardingHoldings, setOnboardingHoldings] = useState<Holding[]>([]);
   const [onboardingInterests, setOnboardingInterests] = useState<string[]>([]);
+  const [onboardingSource, setOnboardingSource] = useState<string | null>(null);
   const [portfolioDraft, setPortfolioDraft] = useState<PortfolioDraft>({
     freeText: "",
     pickedAssets: [],
@@ -2363,11 +2346,14 @@ export function VestoryApp() {
         <PortfolioEntryScreen
           draft={portfolioDraft}
           onDraftChange={setPortfolioDraft}
-          onNext={async (holdings, interests) => {
-            setOnboardingHoldings(holdings);
-            setOnboardingInterests(interests);
-            if (holdings.length > 0) goTo("portfolio-confirm");
-            else await handleOnboardingComplete([], interests);
+          onNext={async (holdings, interests, source) => {
+            // Keep corrections after back/forward if the source inputs have not changed.
+            if (source !== onboardingSource) {
+              setOnboardingHoldings(holdings);
+              setOnboardingInterests(interests);
+              setOnboardingSource(source);
+            }
+            goTo("portfolio-confirm");
           }}
           onBack={() => goTo("welcome")}
         />
@@ -2376,13 +2362,13 @@ export function VestoryApp() {
       {screen === "portfolio-confirm" && (
         <PortfolioConfirmScreen
           holdings={onboardingHoldings}
-          onNext={(rows) => {
+          interests={onboardingInterests}
+          onNext={async (rows, topics) => {
             setOnboardingHoldings(rows);
-            void handleOnboardingComplete(rows, onboardingInterests).catch((error) => {
-              setLoadError(error instanceof Error ? error.message : "שמירת הפרופיל נכשלה.");
-            });
+            setOnboardingInterests(topics);
+            await handleOnboardingComplete(rows, topics);
           }}
-          onBack={() => goTo("portfolio-entry")}
+          onBack={(rows, topics) => { setOnboardingHoldings(rows); setOnboardingInterests(topics); goTo("portfolio-entry"); }}
         />
       )}
 

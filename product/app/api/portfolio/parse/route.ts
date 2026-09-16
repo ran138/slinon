@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { getCurrentUser } from "@/lib/auth";
+import { conceptKey, matchAsset, matchInterest, normalizeInterests, parseOnboardingText } from "@/lib/onboarding";
 
 export const runtime = "nodejs";
 const parsedPortfolioInput = z.object({
@@ -16,48 +17,11 @@ const parsedPortfolioInput = z.object({
   interests: z.array(z.string().trim().min(1).max(80)).max(20),
 });
 
-const aliases: Record<string, { name: string; symbol: string }> = {
-  nvidia: { name: "NVIDIA", symbol: "NVDA" }, nvda: { name: "NVIDIA", symbol: "NVDA" },
-  "אינווידיה": { name: "NVIDIA", symbol: "NVDA" }, "נווידיה": { name: "NVIDIA", symbol: "NVDA" }, "אנבידיה": { name: "NVIDIA", symbol: "NVDA" },
-  apple: { name: "Apple", symbol: "AAPL" }, aapl: { name: "Apple", symbol: "AAPL" },
-  bitcoin: { name: "Bitcoin", symbol: "BTC" }, btc: { name: "Bitcoin", symbol: "BTC" },
-  "s&p 500": { name: "S&P 500", symbol: "SPY" },
-};
-
-const interestAliases: Record<string, string> = {
-  ai: "AI",
-  "בינה מלאכותית": "AI",
-  technology: "טכנולוגיה",
-  "טכנולוגיה": "טכנולוגיה",
-  gold: "זהב",
-  "זהב": "זהב",
-  inflation: "ריבית ואינפלציה",
-  "אינפלציה": "ריבית ואינפלציה",
-  "real estate": "שוק הנדל״ן",
-  "נדלן": "שוק הנדל״ן",
-  "נדל״ן": "שוק הנדל״ן",
-};
-
-function findKnownAssets(text: string) {
-  const lower = text.toLowerCase();
-  const matches = Object.entries(aliases)
-    .filter(([key]) => lower.includes(key))
-    .map(([, item]) => ({ ...item, quantity: null, averageCost: null, currency: null }));
-  return Array.from(new Map(matches.map((item) => [item.symbol, item])).values());
-}
-
-function findKnownInterests(text: string) {
-  const lower = text.toLocaleLowerCase();
-  return Array.from(new Set(
-    Object.entries(interestAliases).filter(([key]) => lower.includes(key)).map(([, label]) => label),
-  ));
-}
-
 function normalizeAsset(asset: { name: string; symbol: string; quantity: string | null; averageCost: string | null; currency: string | null }) {
-  const known = aliases[asset.symbol.toLowerCase()] ?? aliases[asset.name.toLowerCase()];
+  const known = matchAsset(asset.symbol, false) ?? matchAsset(asset.name, false);
   return {
     name: known?.name ?? asset.name.trim(),
-    symbol: (known?.symbol ?? asset.symbol).trim().toUpperCase(),
+    symbol: (known?.ticker ?? asset.symbol).trim().toUpperCase(),
     quantity: asset.quantity?.trim() || null,
     averageCost: asset.averageCost?.trim() || null,
     currency: asset.currency?.trim() || null,
@@ -72,33 +36,42 @@ export async function POST(request: Request) {
   }
 
   const { text } = z.object({ text: z.string().trim().min(1).max(2000) }).parse(await request.json());
-  const knownAssets = findKnownAssets(text);
-  const knownInterests = findKnownInterests(text);
+  const fallback = parseOnboardingText(text);
+  function fallbackResponse(localPreview = false) {
+    if (fallback.interests.some((label) => label.length > 80)) {
+      return NextResponse.json({ error: "נושא אישי יכול להכיל עד 80 תווים. פצלו נושאים ארוכים באמצעות פסיקים כדי שנוכל לשמור את כולם." }, { status: 400 });
+    }
+    return NextResponse.json({ ...fallback, ...(localPreview ? { localPreview: true } : { localFallback: true }) });
+  }
   if (isLocalPreview) {
-    return NextResponse.json({
-      assets: knownAssets,
-      interests: knownInterests.length || knownAssets.length ? knownInterests : [text.slice(0, 80)],
-      localPreview: true,
-    });
+    return fallbackResponse(true);
   }
   if (!process.env.OPENAI_API_KEY) {
-    if (knownAssets.length || knownInterests.length) {
-      return NextResponse.json({ assets: knownAssets, interests: knownInterests, localMatch: true });
-    }
-    return NextResponse.json({ assets: [], interests: [text.slice(0, 80)], localFallback: true });
+    return fallbackResponse();
   }
   try {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000 });
     const result = await client.responses.parse({
       model: process.env.OPENAI_TEXT_MODEL ?? "gpt-5.6-terra",
       store: false,
-      input: `Classify the items explicitly present in this onboarding text into assets and broader investment interests. Assets are securities, funds, indexes, companies, currencies, or cryptocurrencies that can be held or followed; include their symbol when known. Interests are broader subjects such as technology, AI, inflation, gold, or real estate. Never invent an item or numeric value. Do not include the same item as both an asset and an interest. Use null for omitted optional asset data. Text: ${text}`,
+      input: [
+        { role: "system", content: "Classify every meaningful concept in the user's onboarding text into assets and broader investment interests. Assets are securities, funds, indexes, companies, currencies or cryptocurrencies; use a symbol only when confident. Preserve commodities, sectors, industries, macro topics and unknown/custom investment interests as interests, not invented assets. Correct minor spelling mistakes only when unambiguous; otherwise preserve the original topic for confirmation. Normalize confident company/ticker aliases and index spacing variants. Never drop an unresolved concept or invent an item/numeric value. Do not include the same concept in both lists. Use null for omitted optional asset data." },
+        { role: "user", content: text },
+      ],
       text: { format: zodTextFormat(parsedPortfolioInput, "portfolio_input") },
     });
-    const assets = (result.output_parsed?.assets ?? []).map(normalizeAsset).filter((asset) => asset.name && asset.symbol);
-    const interests = Array.from(new Set(result.output_parsed?.interests ?? []));
+    if (!result.output_parsed) return fallbackResponse();
+    const parsed = result.output_parsed;
+    const topicLikeAssets = parsed.assets.filter((asset) => !asset.symbol.trim() || (matchInterest(asset.name, false) && !matchAsset(asset.name, false)));
+    const assets = Array.from(new Map([...fallback.assets, ...parsed.assets.filter((asset) => !topicLikeAssets.includes(asset)).map(normalizeAsset).filter((asset) => asset.name && asset.symbol)]
+      .map((asset) => [conceptKey(asset.symbol), asset])).values());
+    const recognized = [...assets.flatMap((asset) => [asset.name, asset.symbol]), ...parsed.interests].map(conceptKey).filter(Boolean);
+    const preserved = fallback.interests.filter((label) => !recognized.some((key) => conceptKey(label) === key));
+    const interests = normalizeInterests([...parsed.interests, ...topicLikeAssets.map((asset) => asset.name), ...preserved])
+      .filter((label) => !assets.some((asset) => conceptKey(asset.name) === conceptKey(label) || matchAsset(label, false)?.ticker === asset.symbol));
+    if (interests.some((label) => label.length > 80)) return fallbackResponse();
     return NextResponse.json({ assets, interests });
   } catch {
-    return NextResponse.json({ error: "לא הצלחנו לזהות את הנכסים והנושאים. אפשר לנסות שוב או להזין ניסוח ברור יותר." }, { status: 502 });
+    return fallbackResponse();
   }
 }
