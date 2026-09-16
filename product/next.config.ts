@@ -50,6 +50,13 @@ const nextConfig: NextConfig = {
         { key: "X-Content-Type-Options", value: "nosniff" },
         { key: "X-Frame-Options", value: "DENY" },
     ];
+    // Podcast audio is served via a redirect to a short-lived Supabase
+    // Storage signed URL (see app/api/briefs/[id]/audio/[chapter]/route.ts)
+    // rather than proxied through our own origin, so media-src needs to
+    // allow that host explicitly — 'self' alone would silently block
+    // playback with no visible error beyond a CSP console warning.
+    const supabaseOrigin = (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
+    const mediaSrc = supabaseOrigin ? `'self' ${supabaseOrigin}` : "'self'";
     return [
       { source: "/(.*)", headers: securityHeaders },
       {
@@ -62,7 +69,7 @@ const nextConfig: NextConfig = {
         // the project may be created in either) — its session-replay/
         // analytics SDK sends data directly from the browser, unlike our
         // server-mediated Supabase auth calls.
-        headers: [{ key: "Content-Security-Policy", value: `default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com https://eu-assets.i.posthog.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` }],
+        headers: [{ key: "Content-Security-Policy", value: `default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com https://eu-assets.i.posthog.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src ${mediaSrc}; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` }],
       },
       {
         source: "/login",
