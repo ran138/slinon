@@ -36,11 +36,10 @@ require the relevant local services or provider credentials.
 
 ## Latest run
 
-- 521 tests collected
-- 519 tests passed
-- 2 assertions failed, representing 1 distinct application defect
-- The OAuth redirect defect was fixed in the authentication callback
+- 526 tests collected
+- 526 tests passed
+- 0 assertions failed
+- The OAuth redirect and multi-word interest parsing defects were fixed
 
-The remaining failures deliberately preserve evidence for a multi-word
-custom-interest parsing regression. They should not be hidden by weakening the
-assertions.
+The suite now covers both deterministic fallback parsing and semantic AI
+classification for multi-word custom investment interests.

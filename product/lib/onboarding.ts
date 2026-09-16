@@ -101,24 +101,66 @@ export function searchInterests(query: string) {
 export function parseOnboardingText(text: string) {
   const assets: { name: string; symbol: string; quantity: null; averageCost: null; currency: null }[] = [];
   const interests: string[] = [];
-  function add(value: string, fuzzy = true) {
+  type Match =
+    | { kind: "asset"; value: NonNullable<ReturnType<typeof matchAsset>> }
+    | { kind: "interest"; value: string };
+  function classify(value: string, fuzzy = true): Match | null {
     const asset = matchAsset(value, fuzzy);
     const topic = matchInterest(value, fuzzy);
-    if (asset && !topic) { assets.push({ name: asset.name, symbol: asset.ticker, quantity: null, averageCost: null, currency: null }); return true; }
-    if (topic && !asset) { interests.push(topic); return true; }
-    return false;
+    if (asset && !topic) return { kind: "asset", value: asset };
+    if (topic && !asset) return { kind: "interest", value: topic };
+    return null;
+  }
+  function record(match: Match) {
+    if (match.kind === "asset") {
+      assets.push({ name: match.value.name, symbol: match.value.ticker, quantity: null, averageCost: null, currency: null });
+    } else {
+      interests.push(match.value);
+    }
+  }
+  function add(value: string, fuzzy = true) {
+    const match = classify(value, fuzzy);
+    if (!match) return false;
+    record(match);
+    return true;
   }
   for (const chunk of text.split(/[,;\n،]+/).map((v) => v.trim()).filter(Boolean)) {
     if (add(chunk)) continue;
     const words = chunk.split(/\s+/);
-    const unresolved: string[] = [];
+    const segments: { words: string[]; match: Match | null }[] = [];
     for (let i = 0; i < words.length;) {
       let count = Math.min(5, words.length - i);
-      while (count > 0 && !add(words.slice(i, i + count).join(" "), false)) count--;
-      if (count) i += count;
-      else { unresolved.push(words[i]); i++; }
+      let match: Match | null = null;
+      while (count > 0 && !match) {
+        match = classify(words.slice(i, i + count).join(" "), false);
+        if (!match) count--;
+      }
+      if (match) {
+        segments.push({ words: words.slice(i, i + count), match });
+        i += count;
+      } else {
+        segments.push({ words: [words[i]], match: null });
+        i++;
+      }
     }
-    if (unresolved.length) interests.push(unresolved.join(" "));
+    if (segments.every((segment) => segment.match)) {
+      for (const segment of segments) record(segment.match!);
+      continue;
+    }
+    let customWords: string[] = [];
+    const flushCustomInterest = () => {
+      if (customWords.length) interests.push(customWords.join(" "));
+      customWords = [];
+    };
+    for (const segment of segments) {
+      if (segment.match?.kind === "asset") {
+        flushCustomInterest();
+        record(segment.match);
+      } else {
+        customWords.push(...segment.words);
+      }
+    }
+    flushCustomInterest();
   }
   return { assets: Array.from(new Map(assets.map((asset) => [asset.symbol, asset])).values()), interests: normalizeInterests(interests) };
 }

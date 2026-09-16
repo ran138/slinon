@@ -129,6 +129,17 @@ describe("onboarding matching", () => {
     });
   });
 
+  it.each(["אנרגיה ירוקה", "בריאות דיגיטלית", "חקלאות חכמה"])("preserves the custom investment phrase %s as one interest", (topic) => {
+    expect(parseOnboardingText(topic)).toEqual({ assets: [], interests: [topic] });
+  });
+
+  it("extracts a known asset without breaking the adjacent custom investment phrase", () => {
+    expect(parseOnboardingText("Apple אנרגיה ירוקה")).toEqual({
+      assets: [{ name: "Apple", symbol: "AAPL", quantity: null, averageCost: null, currency: null }],
+      interests: ["אנרגיה ירוקה"],
+    });
+  });
+
   it("deduplicates the same asset supplied through different aliases", () => {
     expect(parseOnboardingText("NVDA, אנבידיה, NVIDIA").assets).toHaveLength(1);
   });

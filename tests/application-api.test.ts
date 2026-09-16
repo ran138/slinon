@@ -10,7 +10,21 @@ const mocks = vi.hoisted(() => ({
   createBrief: vi.fn(),
   getBrief: vi.fn(),
   getMarketQuotes: vi.fn(),
+  parseOpenAI: vi.fn(),
 }));
+
+vi.mock("openai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("openai")>();
+  return {
+    ...actual,
+    default: class OpenAI {
+      responses: { parse: typeof mocks.parseOpenAI };
+      constructor() {
+        this.responses = { parse: mocks.parseOpenAI };
+      }
+    },
+  };
+});
 
 vi.mock("@/lib/auth", () => ({ getCurrentUser: mocks.getCurrentUser }));
 vi.mock("@/db", () => ({
@@ -94,6 +108,17 @@ describe("portfolio parsing", () => {
       interests: ["קריפטו"],
       localFallback: true,
     });
+  });
+
+  it("keeps a semantic investment phrase intact when AI classifies it", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+    mocks.getCurrentUser.mockResolvedValue({ id: "user-1" });
+    mocks.parseOpenAI.mockResolvedValue({
+      output_parsed: { assets: [], interests: ["אנרגיה ירוקה"] },
+    });
+    const response = await parsePortfolio(jsonRequest("/api/portfolio/parse", { text: "אנרגיה ירוקה" }));
+    expect(mocks.parseOpenAI).toHaveBeenCalledOnce();
+    expect(await responseJson(response)).toEqual({ assets: [], interests: ["אנרגיה ירוקה"] });
   });
 
   it("reports unavailable image recognition without an API key", async () => {

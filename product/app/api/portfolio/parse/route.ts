@@ -6,14 +6,18 @@ import { getCurrentUser } from "@/lib/auth";
 import { conceptKey, matchAsset, matchInterest, normalizeInterests, parseOnboardingText } from "@/lib/onboarding";
 
 export const runtime = "nodejs";
-const parsedPortfolioInput = z.object({
+const portfolioOutputFormat = z.object({
   assets: z.array(z.object({
     name: z.string(),
     symbol: z.string(),
     quantity: z.string().nullable(),
     averageCost: z.string().nullable(),
     currency: z.string().nullable(),
-  })).max(20),
+  })),
+  interests: z.array(z.string()),
+});
+const parsedPortfolioInput = portfolioOutputFormat.extend({
+  assets: portfolioOutputFormat.shape.assets.max(20),
   interests: z.array(z.string().trim().min(1).max(80)).max(20),
 });
 
@@ -55,13 +59,15 @@ export async function POST(request: Request) {
       model: process.env.OPENAI_TEXT_MODEL ?? "gpt-5.6-terra",
       store: false,
       input: [
-        { role: "system", content: "Classify every meaningful concept in the user's onboarding text into assets and broader investment interests. Assets are securities, funds, indexes, companies, currencies or cryptocurrencies; use a symbol only when confident. Preserve commodities, sectors, industries, macro topics and unknown/custom investment interests as interests, not invented assets. Correct minor spelling mistakes only when unambiguous; otherwise preserve the original topic for confirmation. Normalize confident company/ticker aliases and index spacing variants. Never drop an unresolved concept or invent an item/numeric value. Do not include the same concept in both lists. Use null for omitted optional asset data." },
+        { role: "system", content: "Classify every meaningful concept in the user's onboarding text into assets and broader investment interests. Assets are securities, funds, indexes, companies, currencies or cryptocurrencies; use a symbol only when confident. Preserve commodities, sectors, industries, macro topics and unknown/custom investment interests as interests, not invented assets. Keep semantic noun phrases such as green energy, digital health or smart agriculture intact as one interest; never split a meaningful phrase into separate words. Correct minor spelling mistakes only when unambiguous; otherwise preserve the original topic for confirmation. Normalize confident company/ticker aliases and index spacing variants. Never drop an unresolved concept or invent an item/numeric value. Do not include the same concept in both lists. Use null for omitted optional asset data." },
         { role: "user", content: text },
       ],
-      text: { format: zodTextFormat(parsedPortfolioInput, "portfolio_input") },
+      text: { format: zodTextFormat(portfolioOutputFormat, "portfolio_input") },
     });
     if (!result.output_parsed) return fallbackResponse();
-    const parsed = result.output_parsed;
+    const validated = parsedPortfolioInput.safeParse(result.output_parsed);
+    if (!validated.success) return fallbackResponse();
+    const parsed = validated.data;
     const topicLikeAssets = parsed.assets.filter((asset) => !asset.symbol.trim() || (matchInterest(asset.name, false) && !matchAsset(asset.name, false)));
     const assets = Array.from(new Map([...fallback.assets, ...parsed.assets.filter((asset) => !topicLikeAssets.includes(asset)).map(normalizeAsset).filter((asset) => asset.name && asset.symbol)]
       .map((asset) => [conceptKey(asset.symbol), asset])).values());
