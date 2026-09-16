@@ -9,6 +9,7 @@ import { VestoryWordmark } from "@/components/vestory-wordmark";
 import { initAnalytics, identifyUser, resetAnalytics } from "@/lib/analytics";
 import { LegalFooter } from "@/components/legal/footer";
 import { INTERESTS, POPULAR_ASSETS, conceptKey, matchAsset, matchInterest, normalizeInterests, searchAssets, searchInterests } from "@/lib/onboarding";
+import { targetMinutesForPlan } from "@/lib/schedule";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,7 +22,6 @@ type Screen =
   | "player"
   | "sources"
   | "settings-portfolio"
-  | "settings-personalization"
   | "history";
 
 interface Holding {
@@ -59,20 +59,67 @@ function fmtMs(ms?: number | null) {
 
 // ─── Small shared components ──────────────────────────────────────────────────
 
-function TopBar({ onNav, screen, onSignOut }: { onNav: (s: Screen) => void; screen: Screen; onSignOut: () => void }) {
-  const showNav = ["dashboard", "player", "sources", "settings-portfolio", "settings-personalization", "history"].includes(screen);
+function TopBar({
+  onNav, screen, onSignOut,
+  podcastPlan, scheduleTime, scheduleDay, nextRunAt, notifyByEmail, onSaveSchedule,
+}: {
+  onNav: (s: Screen) => void; screen: Screen; onSignOut: () => void;
+  podcastPlan: "daily" | "weekly"; scheduleTime: string; scheduleDay: number | null;
+  nextRunAt: string | null; notifyByEmail: boolean;
+  onSaveSchedule: (data: { podcastPlan: "daily" | "weekly"; scheduleTime: string; scheduleDay: number | null; notifyByEmail: boolean }) => Promise<void>;
+}) {
+  const showNav = ["dashboard", "player", "sources", "settings-portfolio", "history"].includes(screen);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const scheduleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!scheduleOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (scheduleRef.current && !scheduleRef.current.contains(e.target as Node)) setScheduleOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [scheduleOpen]);
+
   if (!showNav) return null;
   return (
     <header className="sticky top-0 z-50" style={{ borderBottom: "1px solid #292c3d", background: "rgba(9,10,17,0.92)", backdropFilter: "blur(18px)" }}>
       <div className="max-w-5xl mx-auto px-6 h-14 relative flex items-center justify-between">
-        <button onClick={() => onNav("dashboard")} className="flex items-center gap-2.5 group" style={{ background: "none", border: "none", cursor: "pointer" }}>
-          <VestoryWordmark size="sm" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => onNav("dashboard")} className="flex items-center gap-2.5 group" style={{ background: "none", border: "none", cursor: "pointer" }}>
+            <VestoryWordmark size="sm" />
+          </button>
+          <div ref={scheduleRef} style={{ position: "relative" }}>
+            <button
+              onClick={() => setScheduleOpen((v) => !v)}
+              aria-label="הגדרות פודקאסט"
+              style={{
+                width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+                background: scheduleOpen ? "rgba(123,111,245,0.15)" : "transparent",
+                color: scheduleOpen ? "#7b6ff5" : "#9b9dae", border: "none", cursor: "pointer",
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
+            {scheduleOpen && (
+              <SchedulePanel
+                podcastPlan={podcastPlan}
+                scheduleTime={scheduleTime}
+                scheduleDay={scheduleDay}
+                nextRunAt={nextRunAt}
+                notifyByEmail={notifyByEmail}
+                onSave={async (data) => { await onSaveSchedule(data); setScheduleOpen(false); }}
+              />
+            )}
+          </div>
+        </div>
         <nav className="absolute flex items-center gap-1" style={{ left: "50%", transform: "translateX(-50%)" }}>
           {[
             { id: "dashboard" as Screen, label: "היום" },
             { id: "settings-portfolio" as Screen, label: "תיק" },
-            { id: "settings-personalization" as Screen, label: "העדפות" },
             { id: "history" as Screen, label: "היסטוריה" },
           ].map((item) => (
             <button
@@ -98,6 +145,124 @@ function TopBar({ onNav, screen, onSignOut }: { onNav: (s: Screen) => void; scre
         </button>
       </div>
     </header>
+  );
+}
+
+function SchedulePanel({ podcastPlan, scheduleTime, scheduleDay, nextRunAt, notifyByEmail, onSave }: {
+  podcastPlan: "daily" | "weekly"; scheduleTime: string; scheduleDay: number | null;
+  nextRunAt: string | null; notifyByEmail: boolean;
+  onSave: (data: { podcastPlan: "daily" | "weekly"; scheduleTime: string; scheduleDay: number | null; notifyByEmail: boolean }) => Promise<void>;
+}) {
+  const [selectedPlan, setSelectedPlan] = useState<"daily" | "weekly">(podcastPlan);
+  const [selectedTime, setSelectedTime] = useState(scheduleTime);
+  const [selectedDay, setSelectedDay] = useState(
+    scheduleDay !== null && scheduleDay >= 1 && scheduleDay <= 5 ? scheduleDay : 1,
+  );
+  const [emailNotify, setEmailNotify] = useState(notifyByEmail);
+  const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  async function save() {
+    setSaved("saving");
+    try {
+      await onSave({
+        podcastPlan: selectedPlan,
+        scheduleTime: selectedTime,
+        scheduleDay: selectedPlan === "weekly" ? selectedDay : null,
+        notifyByEmail: emailNotify,
+      });
+      setSaved("saved");
+      setTimeout(() => setSaved("idle"), 1500);
+    } catch { setSaved("error"); }
+  }
+
+  return (
+    <div
+      className="absolute rounded-2xl p-5"
+      style={{
+        top: "calc(100% + 8px)", right: 0, width: 320, zIndex: 60,
+        background: "#11131e", border: "1px solid #292c3d", boxShadow: "0 12px 40px rgba(0,0,0,0.5)", direction: "rtl",
+      }}
+    >
+      <h3 className="text-sm font-semibold mb-1" style={{ color: "#f7f7fb" }}>תוכנית הפודקאסט</h3>
+      <p className="text-xs mb-4" style={{ color: "#565968" }}>בחרו באיזו תדירות ומתי הפודקאסט יהיה מוכן.</p>
+
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        {[
+          { id: "daily" as const, title: "תוכנית יומית", detail: "כ־5 דקות, בימים שני עד שישי" },
+          { id: "weekly" as const, title: "תוכנית שבועית", detail: "כ־15 דקות פעם בשבוע" },
+        ].map((plan) => {
+          const selected = selectedPlan === plan.id;
+          return (
+            <button key={plan.id} onClick={() => setSelectedPlan(plan.id)} className="rounded-xl text-right transition-all" style={{
+              minHeight: 66, padding: "10px 12px",
+              background: selected ? "linear-gradient(130deg, rgba(123,111,245,0.28), rgba(91,138,240,0.22))" : "#181a26",
+              color: selected ? "#fff" : "#9b9dae",
+              border: `1px solid ${selected ? "rgba(123,111,245,0.65)" : "#292c3d"}`,
+              cursor: "pointer",
+            }}>
+              <span className="block text-sm font-semibold">{plan.title}</span>
+              <span className="block text-xs mt-1" style={{ color: selected ? "#c9c5ff" : "#565968" }}>{plan.detail}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-3 mt-4" style={{ gridTemplateColumns: selectedPlan === "weekly" ? "1fr 1fr" : "1fr", alignItems: "end" }}>
+        {selectedPlan === "weekly" && (
+          <label className="text-xs" style={{ color: "#9b9dae" }}>
+            יום בשבוע
+            <select value={selectedDay} onChange={(event) => setSelectedDay(Number(event.target.value))} className="w-full mt-2 h-10 rounded-lg px-3" style={{ background: "#181a26", color: "#f7f7fb", border: "1px solid #292c3d", direction: "rtl" }}>
+              {[
+                { value: 1, label: "יום שני" },
+                { value: 2, label: "יום שלישי" },
+                { value: 3, label: "יום רביעי" },
+                { value: 4, label: "יום חמישי" },
+                { value: 5, label: "יום שישי" },
+              ].map(({ value, label }) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="text-xs" style={{ color: "#9b9dae" }}>
+          שעה שבה הפודקאסט יהיה מוכן
+          <input type="time" value={selectedTime} onChange={(event) => setSelectedTime(event.target.value)} className="w-full mt-2 h-10 rounded-lg px-3" style={{ background: "#181a26", color: "#f7f7fb", border: "1px solid #292c3d", direction: "ltr" }} />
+        </label>
+      </div>
+
+      <p className="text-xs mt-3" style={{ color: "#565968" }}>
+        {selectedPlan === "daily" ? "הפודקאסט יוכן בימים שני עד שישי בלבד · " : ""}
+        אזור זמן: ישראל (Asia/Jerusalem)
+        {nextRunAt ? ` · הפודקאסט הבא: ${new Date(nextRunAt).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
+      </p>
+
+      <div className="flex items-center justify-between" style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #292c3d" }}>
+        <div>
+          <p className="text-sm font-medium" style={{ color: "#f7f7fb" }}>מייל כשהפודקאסט מוכן</p>
+          <p className="text-xs mt-0.5" style={{ color: "#565968" }}>קישור להאזנה, בשעה שבחרתם למעלה.</p>
+        </div>
+        <button
+          onClick={() => setEmailNotify((v) => !v)}
+          role="switch"
+          aria-checked={emailNotify}
+          style={{
+            flexShrink: 0, width: 40, height: 24, borderRadius: 999, position: "relative",
+            background: emailNotify ? "linear-gradient(130deg, #7b6ff5, #5b8af0)" : "#292c3d",
+            border: "none", cursor: "pointer", transition: "background 0.2s",
+          }}
+        >
+          <span style={{
+            position: "absolute", top: 3, width: 18, height: 18, borderRadius: "50%", background: "#fff",
+            right: emailNotify ? 3 : 19, transition: "right 0.2s",
+          }} />
+        </button>
+      </div>
+
+      {saved === "error" && <p className="text-xs mt-3" style={{ color: "#f87171" }}>שמירת השינויים נכשלה.</p>}
+      <button onClick={save} disabled={saved === "saving"} className="mt-4 w-full h-9 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", cursor: saved === "saving" ? "not-allowed" : "pointer" }}>
+        {saved === "saving" ? "שומר…" : saved === "saved" ? "נשמר ✓" : "שמירת שינויים"}
+      </button>
+    </div>
   );
 }
 
@@ -1586,8 +1751,17 @@ function SourcesScreen({ brief, onNav }: { brief: BriefView | null; onNav: (s: S
 
 // ─── PortfolioSettingsScreen ──────────────────────────────────────────────────
 
-function PortfolioSettingsScreen({ holdings, onSave }: { holdings: Holding[]; onSave: (h: Holding[]) => Promise<void> }) {
+function PortfolioSettingsScreen({ holdings, interests, onSave }: {
+  holdings: Holding[]; interests: string[];
+  onSave: (h: Holding[], interests: string[]) => Promise<void>;
+}) {
   const [rows, setRows] = useState<Holding[]>(holdings);
+  const predefinedIds = interests.filter((id) => INTERESTS.some((i) => i.id === id));
+  const initialCustom = interests.filter((id) => !INTERESTS.some((i) => i.id === id));
+  const [selectedInterests, setSelectedInterests] = useState<string[]>(predefinedIds);
+  const [customInterests, setCustomInterests] = useState<string[]>(initialCustom);
+  const [interestInput, setInterestInput] = useState("");
+  const [interestFocused, setInterestFocused] = useState(false);
   const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1601,15 +1775,22 @@ function PortfolioSettingsScreen({ holdings, onSave }: { holdings: Holding[]; on
   const [dragOver, setDragOver] = useState(false);
 
   function removeHolding(id: string) { setRows(rows.filter((h) => h.id !== id)); }
-  function updateHolding(id: string, field: keyof Holding, value: string) { setRows(rows.map((h) => (h.id === id ? { ...h, [field]: value } : h))); }
-  function addHolding() { setRows([...rows, { id: crypto.randomUUID(), ticker: "", name: "", quantity: "", avgCost: "" }]); }
   function addFromPicker(ticker: string, name: string) {
     if (!rows.find((h) => h.ticker === ticker)) setRows([...rows, { id: crypto.randomUUID(), ticker, name, quantity: "", avgCost: "" }]);
   }
+  function toggleInterest(id: string) { setSelectedInterests((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id])); }
+  function addCustomInterest() {
+    const v = interestInput.trim();
+    if (v && !customInterests.includes(v)) setCustomInterests((p) => [...p, v]);
+    setInterestInput("");
+  }
+  function removeCustomInterest(v: string) { setCustomInterests((p) => p.filter((x) => x !== v)); }
   async function save() {
     setSaved("saving");
-    try { await onSave(rows.filter((h) => h.ticker.trim())); setSaved("saved"); setTimeout(() => setSaved("idle"), 2000); }
-    catch { setSaved("error"); }
+    try {
+      await onSave(rows.filter((h) => h.ticker.trim()), [...selectedInterests, ...customInterests]);
+      setSaved("saved"); setTimeout(() => setSaved("idle"), 2000);
+    } catch { setSaved("error"); }
   }
 
   const searchResults = searchQuery.trim().length > 0
@@ -1680,23 +1861,9 @@ function PortfolioSettingsScreen({ holdings, onSave }: { holdings: Holding[]; on
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </button>
                 </div>
-                <div className="px-5 pb-3.5 grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
-                  {([{ label: "כמות", field: "quantity" as const, placeholder: "מס׳ יחידות" }, { label: "מחיר קנייה ממוצע", field: "avgCost" as const, placeholder: "₪ / $" }] as const).map(({ label, field, placeholder }) => (
-                    <div key={field} style={{ borderRadius: 8, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", padding: "7px 10px" }}>
-                      <label className="text-xs block mb-1" style={{ color: "#565968", letterSpacing: "0.04em" }}>{label}</label>
-                      <input value={h[field]} onChange={(e) => updateHolding(h.id, field, e.target.value)} placeholder={placeholder} className="w-full bg-transparent outline-none text-sm" style={{ color: "#f7f7fb", direction: "ltr" }} />
-                    </div>
-                  ))}
-                </div>
               </div>
             ))
           )}
-          <div style={{ borderTop: "1px solid #292c3d" }}>
-            <button onClick={addHolding} className="flex items-center gap-2 text-sm px-5 py-3.5 w-full hover:bg-white/5 transition-colors" style={{ color: "#565968", background: "none", border: "none", cursor: "pointer" }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-              הוספת נכס ידנית
-            </button>
-          </div>
         </div>
 
         <div className="rounded-2xl overflow-hidden" style={{ background: "linear-gradient(155deg, rgba(26,26,40,0.97) 0%, rgba(18,18,30,0.98) 100%)", border: "1px solid rgba(123,111,245,0.16)" }}>
@@ -1819,253 +1986,53 @@ function PortfolioSettingsScreen({ holdings, onSave }: { holdings: Holding[]; on
           )}
         </div>
 
+        <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
+          <h3 className="text-sm font-semibold mb-1" style={{ color: "#f7f7fb" }}>תחומי עניין</h3>
+          <p className="text-xs mb-4" style={{ color: "#565968" }}>בחרו נושאים שתרצו לשמוע עליהם בפודקאסט.</p>
+
+          <div className="flex flex-wrap gap-2 mb-4">
+            {INTERESTS.map((interest) => {
+              const selected = selectedInterests.includes(interest.id);
+              return (
+                <button key={interest.id} onClick={() => toggleInterest(interest.id)} className="px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all" style={{ background: selected ? "rgba(123,111,245,0.15)" : "#181a26", color: selected ? "#7b6ff5" : "#9b9dae", border: `1px solid ${selected ? "rgba(123,111,245,0.3)" : "#292c3d"}`, cursor: "pointer" }}>
+                  {interest.label}
+                </button>
+              );
+            })}
+            {customInterests.map((ci) => (
+              <div key={ci} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm" style={{ background: "rgba(123,111,245,0.15)", color: "#7b6ff5", border: "1px solid rgba(123,111,245,0.3)" }}>
+                <span>{ci}</span>
+                <button onClick={() => removeCustomInterest(ci)} className="opacity-60 hover:opacity-100 transition-opacity" style={{ lineHeight: 0, background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ borderTop: "1px solid #292c3d", paddingTop: 14 }}>
+            <p className="text-xs mb-2" style={{ color: "#565968" }}>לא מצאתם תחום שמעניין אתכם? אפשר לחפש או להוסיף תחום עניין נוסף.</p>
+            <div style={{ position: "relative" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, height: 38, padding: "0 12px", borderRadius: 10, background: "#181a26", border: `1px solid ${interestFocused ? "rgba(123,111,245,0.4)" : "#292c3d"}`, transition: "border-color 0.2s" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#565968" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                <input
+                  value={interestInput}
+                  onChange={(e) => setInterestInput(e.target.value)}
+                  onFocus={() => setInterestFocused(true)}
+                  onBlur={() => setInterestFocused(false)}
+                  onKeyDown={(e) => { if (e.key === "Enter") addCustomInterest(); }}
+                  placeholder="חיפוש או הוספת תחום עניין"
+                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: "0.83rem", color: "#f7f7fb", fontFamily: "Heebo, sans-serif", direction: "rtl" }}
+                />
+                {interestInput.trim() && (
+                  <button onMouseDown={addCustomInterest} style={{ flexShrink: 0, padding: "2px 10px", borderRadius: 6, background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", color: "#fff", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>הוספה</button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {saved === "error" && <Notice tone="error">שמירת השינויים נכשלה.</Notice>}
         <button onClick={save} disabled={saved === "saving"} className="px-6 h-10 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", cursor: saved === "saving" ? "not-allowed" : "pointer" }}>
-          {saved === "saving" ? "שומר…" : saved === "saved" ? "נשמר ✓" : "שמירת שינויים"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── PersonalizationScreen ────────────────────────────────────────────────────
-
-function PersonalizationScreen({ watchlist, podcastPlan, scheduleTime, scheduleDay, nextRunAt, notifyByEmail, interests, onSave }: {
-  watchlist: WatchItem[]; podcastPlan: "daily" | "weekly"; scheduleTime: string;
-  scheduleDay: number | null; nextRunAt: string | null; notifyByEmail: boolean; interests: string[];
-  onSave: (data: {
-    watchlist: WatchItem[]; podcastPlan: "daily" | "weekly";
-    scheduleTime: string; scheduleDay: number | null; notifyByEmail: boolean; interests: string[];
-  }) => Promise<void>;
-}) {
-  const predefinedIds = interests.filter((id) => INTERESTS.some((i) => i.id === id));
-  const initialCustom = interests.filter((id) => !INTERESTS.some((i) => i.id === id));
-  const [selectedInterests, setSelectedInterests] = useState<string[]>(predefinedIds);
-  const [customInterests, setCustomInterests] = useState<string[]>(initialCustom);
-  const [interestInput, setInterestInput] = useState("");
-  const [interestFocused, setInterestFocused] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<"daily" | "weekly">(podcastPlan);
-  const [selectedTime, setSelectedTime] = useState(scheduleTime);
-  const [selectedDay, setSelectedDay] = useState(
-    scheduleDay !== null && scheduleDay >= 1 && scheduleDay <= 5 ? scheduleDay : 1,
-  );
-  const [watchInput, setWatchInput] = useState("");
-  const [watchFocused, setWatchFocused] = useState(false);
-  const [rows, setRows] = useState<WatchItem[]>(watchlist);
-  const [emailNotify, setEmailNotify] = useState(notifyByEmail);
-  const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">("idle");
-
-  const WATCH_SUGGESTIONS: Record<string, string> = {
-    TSLA: "Tesla Inc.", META: "Meta Platforms", BTC: "Bitcoin", ETH: "Ethereum",
-    NVDA: "NVIDIA Corp.", AAPL: "Apple Inc.", MSFT: "Microsoft Corp.",
-    "TASE:NICE": "נייס סיסטמס", "TASE:FIBI": "בנק הפועלים", AMD: "AMD", INTC: "Intel Corp.",
-  };
-  const suggestions = watchInput ? Object.entries(WATCH_SUGGESTIONS).filter(([t, n]) => t.toLowerCase().includes(watchInput.toLowerCase()) || n.toLowerCase().includes(watchInput.toLowerCase())) : [];
-
-  function toggleInterest(id: string) { setSelectedInterests((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id])); }
-  function addCustomInterest() {
-    const v = interestInput.trim();
-    if (v && !customInterests.includes(v)) setCustomInterests((p) => [...p, v]);
-    setInterestInput("");
-  }
-  function removeCustomInterest(v: string) { setCustomInterests((p) => p.filter((x) => x !== v)); }
-
-  async function save() {
-    setSaved("saving");
-    try {
-      await onSave({
-        watchlist: rows,
-        podcastPlan: selectedPlan,
-        scheduleTime: selectedTime,
-        scheduleDay: selectedPlan === "weekly" ? selectedDay : null,
-        notifyByEmail: emailNotify,
-        interests: [...selectedInterests, ...customInterests],
-      });
-      setSaved("saved");
-      setTimeout(() => setSaved("idle"), 2000);
-    } catch { setSaved("error"); }
-  }
-
-  return (
-    <div className="min-h-screen pb-16">
-      <div className="max-w-3xl mx-auto px-6 pt-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold" style={{ color: "#f7f7fb" }}>העדפות</h1>
-          <p className="mt-1 text-sm" style={{ color: "#9b9dae" }}>התאם את הפודקאסט לאופן שבו אתה רוצה לשמוע</p>
-        </div>
-
-        <div className="space-y-6">
-          <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
-            <h3 className="text-sm font-semibold mb-1" style={{ color: "#f7f7fb" }}>תוכנית הפודקאסט</h3>
-            <p className="text-xs mb-4" style={{ color: "#565968" }}>בחרו באיזו תדירות ומתי הפודקאסט יהיה מוכן.</p>
-
-            <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
-              {[
-                { id: "daily" as const, title: "תוכנית יומית", detail: "כ־5 דקות, בימים שני עד שישי" },
-                { id: "weekly" as const, title: "תוכנית שבועית", detail: "כ־10 דקות פעם בשבוע" },
-              ].map((plan) => {
-                const selected = selectedPlan === plan.id;
-                return (
-                  <button key={plan.id} onClick={() => setSelectedPlan(plan.id)} className="rounded-xl text-right transition-all" style={{
-                    minHeight: 70, padding: "12px 14px",
-                    background: selected ? "linear-gradient(130deg, rgba(123,111,245,0.28), rgba(91,138,240,0.22))" : "#181a26",
-                    color: selected ? "#fff" : "#9b9dae",
-                    border: `1px solid ${selected ? "rgba(123,111,245,0.65)" : "#292c3d"}`,
-                    cursor: "pointer",
-                  }}>
-                    <span className="block text-sm font-semibold">{plan.title}</span>
-                    <span className="block text-xs mt-1" style={{ color: selected ? "#c9c5ff" : "#565968" }}>{plan.detail}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="grid gap-3 mt-4" style={{ gridTemplateColumns: selectedPlan === "weekly" ? "1fr 1fr" : "1fr" }}>
-              {selectedPlan === "weekly" && (
-                <label className="text-xs" style={{ color: "#9b9dae" }}>
-                  יום בשבוע
-                  <select value={selectedDay} onChange={(event) => setSelectedDay(Number(event.target.value))} className="w-full mt-2 h-10 rounded-lg px-3" style={{ background: "#181a26", color: "#f7f7fb", border: "1px solid #292c3d", direction: "rtl" }}>
-                    {[
-                      { value: 1, label: "יום שני" },
-                      { value: 2, label: "יום שלישי" },
-                      { value: 3, label: "יום רביעי" },
-                      { value: 4, label: "יום חמישי" },
-                      { value: 5, label: "יום שישי" },
-                    ].map(({ value, label }) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <label className="text-xs" style={{ color: "#9b9dae" }}>
-                שעה שבה הפודקאסט יהיה מוכן
-                <input type="time" value={selectedTime} onChange={(event) => setSelectedTime(event.target.value)} className="w-full mt-2 h-10 rounded-lg px-3" style={{ background: "#181a26", color: "#f7f7fb", border: "1px solid #292c3d", direction: "ltr" }} />
-              </label>
-            </div>
-
-            <p className="text-xs mt-3" style={{ color: "#565968" }}>
-              {selectedPlan === "daily" ? "הפודקאסט יוכן בימים שני עד שישי בלבד · " : ""}
-              אזור זמן: ישראל (Asia/Jerusalem)
-              {nextRunAt ? ` · הפודקאסט הבא מתוכנן להיות מוכן: ${new Date(nextRunAt).toLocaleString("he-IL", { timeZone: "Asia/Jerusalem", weekday: "long", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
-            </p>
-
-            <div className="flex items-center justify-between" style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid #292c3d" }}>
-              <div>
-                <p className="text-sm font-medium" style={{ color: "#f7f7fb" }}>קבלת מייל כשהפודקאסט מוכן</p>
-                <p className="text-xs mt-0.5" style={{ color: "#565968" }}>הודעה עם קישור להאזנה, בשעה שבחרתם למעלה — בלי צורך לזכור לפתוח את האפליקציה.</p>
-              </div>
-              <button
-                onClick={() => setEmailNotify((v) => !v)}
-                role="switch"
-                aria-checked={emailNotify}
-                style={{
-                  flexShrink: 0, width: 40, height: 24, borderRadius: 999, position: "relative",
-                  background: emailNotify ? "linear-gradient(130deg, #7b6ff5, #5b8af0)" : "#292c3d",
-                  border: "none", cursor: "pointer", transition: "background 0.2s",
-                }}
-              >
-                <span style={{
-                  position: "absolute", top: 3, width: 18, height: 18, borderRadius: "50%", background: "#fff",
-                  right: emailNotify ? 3 : 19, transition: "right 0.2s",
-                }} />
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
-            <h3 className="text-sm font-semibold mb-1" style={{ color: "#f7f7fb" }}>נכסים במעקב</h3>
-            <p className="text-xs mb-4" style={{ color: "#565968" }}>אפשר להוסיף חברות או נכסים שתרצה להתעדכן לגביהם גם בלי להחזיק בהם.</p>
-
-            <div className="relative mb-3">
-              <div style={{ display: "flex", alignItems: "center", gap: 8, height: 40, padding: "0 12px", borderRadius: 10, background: "#181a26", border: `1px solid ${watchFocused ? "rgba(123,111,245,0.4)" : "#292c3d"}`, transition: "border-color 0.2s" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#565968" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-                <input
-                  value={watchInput}
-                  onChange={(e) => setWatchInput(e.target.value)}
-                  onFocus={() => setWatchFocused(true)}
-                  onBlur={() => setTimeout(() => setWatchFocused(false), 150)}
-                  placeholder="הוספת נכס למעקב"
-                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: "0.85rem", color: "#f7f7fb", fontFamily: "Heebo, sans-serif", direction: "rtl" }}
-                />
-              </div>
-              {suggestions.length > 0 && (
-                <div className="absolute top-full mt-1 z-20 w-full rounded-xl overflow-hidden" style={{ background: "#181a26", border: "1px solid #292c3d", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
-                  {suggestions.map(([ticker, name]) => (
-                    <button key={ticker} onMouseDown={() => { if (!rows.find((w) => w.ticker === ticker)) setRows([...rows, { ticker, name }]); setWatchInput(""); }} className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/5 transition-colors" style={{ background: "none", border: "none", cursor: "pointer" }}>
-                      <span style={{ color: "#9b9dae" }}>{name}</span>
-                      <span className="text-xs" style={{ color: "#7b6ff5" }}>{ticker}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {rows.length === 0 ? (
-              <div className="text-center py-5" style={{ borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px dashed rgba(255,255,255,0.08)" }}>
-                <p className="text-xs mb-2" style={{ color: "#565968" }}>עדיין לא הוספת נכסים למעקב</p>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {rows.map((w) => (
-                  <div key={w.ticker} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm" style={{ background: "rgba(123,111,245,0.15)", color: "#7b6ff5", border: "1px solid rgba(123,111,245,0.25)" }}>
-                    {w.ticker}
-                    <button onClick={() => setRows(rows.filter((x) => x.ticker !== w.ticker))} className="opacity-60 hover:opacity-100" style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-2xl p-5" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
-            <h3 className="text-sm font-semibold mb-1" style={{ color: "#f7f7fb" }}>תחומי עניין</h3>
-            <p className="text-xs mb-4" style={{ color: "#565968" }}>בחרו נושאים שתרצו לשמוע עליהם בפודקאסט.</p>
-
-            <div className="flex flex-wrap gap-2 mb-4">
-              {INTERESTS.map((interest) => {
-                const selected = selectedInterests.includes(interest.id);
-                return (
-                  <button key={interest.id} onClick={() => toggleInterest(interest.id)} className="px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all" style={{ background: selected ? "rgba(123,111,245,0.15)" : "#181a26", color: selected ? "#7b6ff5" : "#9b9dae", border: `1px solid ${selected ? "rgba(123,111,245,0.3)" : "#292c3d"}`, cursor: "pointer" }}>
-                    {interest.label}
-                  </button>
-                );
-              })}
-              {customInterests.map((ci) => (
-                <div key={ci} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm" style={{ background: "rgba(123,111,245,0.15)", color: "#7b6ff5", border: "1px solid rgba(123,111,245,0.3)" }}>
-                  <span>{ci}</span>
-                  <button onClick={() => removeCustomInterest(ci)} className="opacity-60 hover:opacity-100 transition-opacity" style={{ lineHeight: 0, background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ borderTop: "1px solid #292c3d", paddingTop: 14 }}>
-              <p className="text-xs mb-2" style={{ color: "#565968" }}>לא מצאתם תחום שמעניין אתכם? אפשר לחפש או להוסיף תחום עניין נוסף.</p>
-              <div style={{ position: "relative" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, height: 38, padding: "0 12px", borderRadius: 10, background: "#181a26", border: `1px solid ${interestFocused ? "rgba(123,111,245,0.4)" : "#292c3d"}`, transition: "border-color 0.2s" }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#565968" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-                  <input
-                    value={interestInput}
-                    onChange={(e) => setInterestInput(e.target.value)}
-                    onFocus={() => setInterestFocused(true)}
-                    onBlur={() => setInterestFocused(false)}
-                    onKeyDown={(e) => { if (e.key === "Enter") addCustomInterest(); }}
-                    placeholder="חיפוש או הוספת תחום עניין"
-                    style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: "0.83rem", color: "#f7f7fb", fontFamily: "Heebo, sans-serif", direction: "rtl" }}
-                  />
-                  {interestInput.trim() && (
-                    <button onMouseDown={addCustomInterest} style={{ flexShrink: 0, padding: "2px 10px", borderRadius: 6, background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", color: "#fff", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer", fontFamily: "Heebo, sans-serif" }}>הוספה</button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {saved === "error" && <Notice tone="error">שמירת השינויים נכשלה.</Notice>}
-        <button onClick={save} disabled={saved === "saving"} className="mt-6 px-6 h-10 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(130deg, #7b6ff5, #5b8af0)", border: "none", cursor: saved === "saving" ? "not-allowed" : "pointer" }}>
           {saved === "saving" ? "שומר…" : saved === "saved" ? "נשמר ✓" : "שמירת שינויים"}
         </button>
       </div>
@@ -2196,7 +2163,7 @@ export function VestoryApp() {
       // Local-only preview routing intentionally initializes several related client states together.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfile({ ...EMPTY_PROFILE, onboardingComplete: previewScreen === "preferences" });
-      setScreen(previewScreen === "preferences" ? "settings-personalization" : previewScreen === "onboarding" ? "portfolio-entry" : "welcome");
+      setScreen(previewScreen === "preferences" ? "settings-portfolio" : previewScreen === "onboarding" ? "portfolio-entry" : "welcome");
       setLoading(false);
       return;
     }
@@ -2291,28 +2258,27 @@ export function VestoryApp() {
     goTo("dashboard");
   }
 
-  async function handleSaveHoldings(rows: Holding[]) {
+  async function handleSaveHoldings(rows: Holding[], interests: string[]) {
     const watchlistAssets = profile.assets.filter((a) => a.kind === "watchlist");
     const holdingAssets: Profile["assets"] = rows.map((h) => ({ kind: "holding", name: h.name || h.ticker, symbol: h.ticker, quantity: h.quantity || null, averageCost: h.avgCost || null }));
-    await persistProfile({ ...profile, assets: [...holdingAssets, ...watchlistAssets] });
-  }
-
-  async function handleSavePersonalization(data: {
-    watchlist: WatchItem[]; podcastPlan: "daily" | "weekly";
-    scheduleTime: string; scheduleDay: number | null; notifyByEmail: boolean; interests: string[];
-  }) {
-    const holdingAssets = profile.assets.filter((a) => a.kind === "holding");
-    const watchAssets: Profile["assets"] = data.watchlist.map((w) => ({ kind: "watchlist", name: w.name, symbol: w.ticker }));
     await persistProfile({
       ...profile,
-      targetMinutes: data.podcastPlan === "daily" ? 5 : 10,
+      assets: [...holdingAssets, ...watchlistAssets],
+      interests: interests.map((label) => ({ label, custom: !INTERESTS.some((i) => i.id === label) })),
+    });
+  }
+
+  async function handleSaveSchedule(data: {
+    podcastPlan: "daily" | "weekly"; scheduleTime: string; scheduleDay: number | null; notifyByEmail: boolean;
+  }) {
+    await persistProfile({
+      ...profile,
+      targetMinutes: targetMinutesForPlan(data.podcastPlan),
       podcastPlan: data.podcastPlan,
       scheduleTime: data.scheduleTime,
       scheduleDay: data.scheduleDay,
       scheduleTimezone: "Asia/Jerusalem",
       notifyByEmail: data.notifyByEmail,
-      assets: [...holdingAssets, ...watchAssets],
-      interests: data.interests.map((label) => ({ label, custom: !INTERESTS.some((i) => i.id === label) })),
     });
   }
 
@@ -2326,14 +2292,23 @@ export function VestoryApp() {
   }
 
   const holdings = profile.assets.filter((a) => a.kind === "holding").map(assetToHolding);
-  const watchlist = profile.assets.filter((a) => a.kind === "watchlist").map((a) => ({ ticker: a.symbol, name: a.name }));
   const activeBrief = briefs.find((b) => b.id === activeBriefId) ?? briefs[0] ?? null;
 
-  const topBarScreens: Screen[] = ["dashboard", "player", "sources", "settings-portfolio", "settings-personalization", "history"];
+  const topBarScreens: Screen[] = ["dashboard", "player", "sources", "settings-portfolio", "history"];
 
   return (
     <div className="vestory-ui" style={{ minHeight: "100%", background: "#080910" }}>
-      <TopBar onNav={goTo} screen={screen} onSignOut={() => void handleSignOut()} />
+      <TopBar
+        onNav={goTo}
+        screen={screen}
+        onSignOut={() => void handleSignOut()}
+        podcastPlan={profile.podcastPlan}
+        scheduleTime={profile.scheduleTime}
+        scheduleDay={profile.scheduleDay}
+        nextRunAt={profile.nextRunAt}
+        notifyByEmail={profile.notifyByEmail}
+        onSaveSchedule={handleSaveSchedule}
+      />
       {!topBarScreens.includes(screen) && (
         <button
           onClick={() => void handleSignOut()}
@@ -2386,17 +2361,11 @@ export function VestoryApp() {
         <PlayerScreen brief={activeBrief} onNav={goTo} autoplay={playOnEnter} onAutoplayed={() => setPlayOnEnter(false)} />
       )}
       {screen === "sources" && <SourcesScreen brief={activeBrief} onNav={goTo} />}
-      {screen === "settings-portfolio" && <PortfolioSettingsScreen holdings={holdings} onSave={handleSaveHoldings} />}
-      {screen === "settings-personalization" && (
-        <PersonalizationScreen
-          watchlist={watchlist}
-          podcastPlan={profile.podcastPlan}
-          scheduleTime={profile.scheduleTime}
-          scheduleDay={profile.scheduleDay}
-          nextRunAt={profile.nextRunAt}
-          notifyByEmail={profile.notifyByEmail}
+      {screen === "settings-portfolio" && (
+        <PortfolioSettingsScreen
+          holdings={holdings}
           interests={profile.interests.map((i) => i.label)}
-          onSave={handleSavePersonalization}
+          onSave={handleSaveHoldings}
         />
       )}
       {screen === "history" && (
