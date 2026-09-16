@@ -1,48 +1,31 @@
-# slinon.me — marketing site
+# Slinon company website — local redesign
 
-Static site. No build step, no dependencies.
+Static Hebrew company website. No build step and no dependencies.
 
-```
-site/
-├── index.html
-├── styles.css
-├── app.js
-└── assets/slinon-logo.png
-```
+## Preview locally
 
-## Run locally
-
-Open `index.html`, or:
+From this folder, run:
 
 ```bash
-python3 -m http.server 8000   # then visit http://localhost:8000
+python3 -m http.server 8000
 ```
 
-## Put it in your repo
+Then open `http://localhost:8000`.
 
-```bash
-git init
-git add .
-git commit -m "slinon marketing site"
-git branch -M main
-git remote add origin git@github.com:<you>/<repo>.git
-git push -u origin main
-```
+## Structure
 
-If the files live in a `site/` subfolder and you want the site at the repo root, move the four items up one level before committing.
+- `index.html` — semantic site content and metadata
+- `styles.css` — responsive visual system and layouts
+- `app.js` — mobile navigation, reveal motion and product-preview interaction
+- `assets/slinon-logo.png` — existing Slinon brand asset from the repository
+- `assets/slinon-tab-logo.png` — official Slinon logo used for the browser tab icon
+- `favicon.svg` — local favicon
 
-## Deploy
+## Before production deployment
 
-- **GitHub Pages** — repo → Settings → Pages → Source: `main`, folder `/ (root)`. Add a `CNAME` file containing `slinon.me` and point a DNS CNAME at `<you>.github.io`.
-- **Vercel / Netlify / Cloudflare Pages** — import the repo, no build command, publish directory = repo root (or `site`).
+1. Expand Lara's short bio when her final copy arrives. Ran's supplied bio and Dor's latest available paragraph are presented as bullet points.
+2. Confirm the final contact method if one should be added.
+3. Add canonical and URL-dependent Open Graph metadata after the permanent company URL is selected.
+4. Confirm that `https://slinon.me/` remains the intended Vestory marketing destination.
 
-## Wiring up the signup form
-
-Both email forms are stubbed in `app.js` (`[data-signup]` handler). Replace the commented `fetch` with a POST to your list provider or your own endpoint, and drop the fake "Sent ✓" state.
-
-## Notes
-
-- Fonts load from Google Fonts (Instrument Serif, IBM Plex Sans, IBM Plex Mono). Self-host them if you'd rather not hit a third party.
-- Colors are CSS custom properties at the top of `styles.css` (`--brand`, `--accent`, backgrounds, ink levels).
-- The logo is the dark-background PNG, blended with `mix-blend-mode: screen`. Swap in an SVG when you have one — same `img` tags in the header and footer.
-- Copy is not investment advice and the footer says so; keep that if you're taking real signups.
+No live repository, hosting, DNS or production settings were changed.
