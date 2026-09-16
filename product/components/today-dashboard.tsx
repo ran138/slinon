@@ -12,6 +12,14 @@ type TrackedAsset = { id: string; ticker: string; name: string };
 const time = (seconds: number) => `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
 const statusLabels: Record<BriefView["status"], string> = { queued: "בתור", researching: "אוספים מידע", scripting: "כותבים", synthesizing: "מכינים אודיו", completed: "מוכן להאזנה", failed: "היצירה לא הושלמה" };
 
+function greetingForIsraelTime(): string {
+  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Jerusalem", hour: "numeric", hour12: false }).format(new Date()));
+  if (hour >= 5 && hour < 12) return "בוקר טוב";
+  if (hour >= 12 && hour < 17) return "צהריים טובים";
+  if (hour >= 17 && hour < 21) return "ערב טוב";
+  return "לילה טוב";
+}
+
 function HeroArtwork() {
   return <div className="today-hero-art" aria-hidden="true"/>;
 }
@@ -47,7 +55,7 @@ export function TodayDashboard({ assets, brief, player, email, plan, onNav, onSi
       {/* The explicit localhost preview uses QA fixtures; no debug copy is rendered. */}
       <section className="today-hero" aria-labelledby="today-greeting"><HeroArtwork/>
         <div className="today-hero-aside"><span>מידע חכם.</span><span>תוכן אישי.</span><span>בזמן שבחרת.</span></div>
-        <div className="today-hero-heading"><h1 id="today-greeting">בוקר טוב</h1><h2>{ready ? "הפודקאסט שלך מוכן" : brief ? "מכינים את הפודקאסט שלך" : "הפודקאסט הבא מתחיל כאן"}</h2><p>כל מה שחשוב להשקעות שלך</p></div>
+        <div className="today-hero-heading"><h1 id="today-greeting">{greetingForIsraelTime()}</h1><h2>{ready ? "הפודקאסט שלך מוכן" : brief ? "מכינים את הפודקאסט שלך" : "הפודקאסט הבא מתחיל כאן"}</h2><p>כל מה שחשוב להשקעות שלך</p></div>
         <div className="today-hero-meta"><span>{date}</span><small>{plan === "weekly" ? "העדכון השבועי שלך" : "העדכון היומי שלך"}</small></div>
       </section>
       <div className="today-podcast-grid" dir="ltr">
@@ -93,7 +101,7 @@ export function TodayPlayerCard({ brief, audioRef, playing, elapsed, totalDurati
     <div className="today-playback" dir="ltr"><button className="today-play" aria-label={playing ? "השהיית הפודקאסט" : "ניגון הפודקאסט"} disabled={!playable} onClick={onToggle}>{playing ? <Pause size={28} fill="currentColor"/> : <Play size={28} fill="currentColor"/>}</button><div className="today-timeline"><div className="today-wave" aria-hidden="true">{Array.from({ length: 64 }, (_, i) => <i key={i} style={{ height: `${24 + Math.sin(i * .4) * 13 + Math.abs(Math.sin(i * 1.1 + .7)) * 45}%`, background: i / 64 < progress ? "linear-gradient(180deg,#8e5cff,#2f86ff)" : undefined }}/>)}</div><input aria-label="מיקום בפודקאסט" type="range" min="0" max={totalDuration / 1000 || 1} step=".1" value={Math.min(elapsed, totalDuration / 1000)} onChange={(event) => onSeek(Number(event.target.value))} disabled={!playable}/><div className="today-times"><span>{time(elapsed)}</span><span>{time(totalDuration / 1000)}</span></div></div></div>
     {!playable && <p className="today-audio-unavailable" role="status">{brief.errorMessage ?? (brief.status === "completed" ? "קובץ האודיו אינו זמין כרגע." : brief.stageLabel || "האודיו יהיה זמין כשהיצירה תסתיים.")}</p>}
     <div className="today-chapters">{brief.chapters.map((chapter, index) => <button key={chapter.id} className={playing && activeChapter === index ? "active" : ""} disabled={!playable} onClick={() => onSeekChapter(index)}><span className="today-chapter-dot"/><bdi dir="auto">{chapter.title}</bdi><time dir="ltr">{time(chapter.startMs / 1000)}</time></button>)}</div>
-    <div className="today-player-secondary"><button onClick={onOpenPlayer}>פתיחה בנגן המלא <ArrowLeft size={15}/></button><label>מהירות <select aria-label="מהירות ניגון" value={speed} onChange={(event) => onSpeed(Number(event.target.value))}>{[1, 1.25, 1.5, 2].map((value) => <option key={value} value={value}>{value}×</option>)}</select></label></div>
+    <div className="today-player-secondary"><button onClick={onOpenPlayer}>פתיחה בנגן המלא <ArrowLeft size={15}/></button><button className="today-speed" aria-label="מהירות ניגון" onClick={() => onSpeed(speed === 1 ? 1.25 : speed === 1.25 ? 1.5 : speed === 1.5 ? 2 : 1)}>מהירות {speed}×</button></div>
     <div className="today-player-actions">{playable ? <a href={brief.audioUrl!} download={`${title}.mp3`}><Download size={22}/>הורדה</a> : <button disabled><Download size={22}/>הורדה</button>}<button onClick={() => void share()}><Share2 size={22}/>שיתוף</button></div>
     {message && <p className="today-action-message" role="status">{message}</p>}
   </div>;
