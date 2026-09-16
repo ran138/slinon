@@ -61,8 +61,12 @@ const nextConfig: NextConfig = {
         // connect-src includes PostHog's ingest hosts (both regions, since
         // the project may be created in either) — its session-replay/
         // analytics SDK sends data directly from the browser, unlike our
-        // server-mediated Supabase auth calls.
-        headers: [{ key: "Content-Security-Policy", value: `default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com https://eu-assets.i.posthog.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` }],
+        // server-mediated Supabase auth calls. img-src allows Finnhub's
+        // static asset subdomains (plural: static2.finnhub.io redirects to a
+        // different numbered shard, e.g. static9, per logo — verified live),
+        // which serve the company logos shown on tracked-asset cards
+        // (lib/marketData.ts).
+        headers: [{ key: "Content-Security-Policy", value: `default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com https://eu-assets.i.posthog.com${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.finnhub.io; media-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` }],
       },
       {
         source: "/login",

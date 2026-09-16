@@ -183,7 +183,7 @@ function SchedulePanel({ podcastPlan, scheduleTime, scheduleDay, nextRunAt, noti
       className="rounded-2xl p-5"
       style={{
         position: inline ? "relative" : "absolute", top: inline ? undefined : "calc(100% + 8px)", right: 0, width: inline ? "100%" : 320, zIndex: 60,
-        background: "#11131e", border: "1px solid #292c3d", boxShadow: "0 12px 40px rgba(0,0,0,0.5)", direction: "rtl",
+        background: "radial-gradient(ellipse at 20% 70%, #0c49532b, transparent 65%), linear-gradient(140deg, #0a1931, #061527)", border: "1px solid #292c3d", boxShadow: "0 12px 40px rgba(0,0,0,0.5)", direction: "rtl",
       }}
     >
       <h3 className="text-sm font-semibold mb-1" style={{ color: "#f7f7fb" }}>תוכנית הפודקאסט</h3>
@@ -674,14 +674,14 @@ function PortfolioEntryScreen({
                                 <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#9d94f7", fontFamily: "JetBrains Mono, monospace", direction: "ltr" }}>{asset.ticker.replace(/[^A-Z]/g, "").slice(0, 2) || asset.ticker.slice(0, 2)}</span>
                               </div>
                               <div style={{ textAlign: "right" }}>
-                                <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#d0d0e8", margin: 0 }}>{asset.nameHe ?? asset.name}</p>
+                                <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#d0d0e8", margin: 0 }}>{asset.name}</p>
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#7b6ff5", fontFamily: "JetBrains Mono, monospace", direction: "ltr" }}>{asset.ticker}</span>
                                   {asset.secNum && <span style={{ fontSize: "0.68rem", color: "#484868" }}>{asset.secNum}</span>}
                                 </div>
                               </div>
                             </div>
-                            <button onClick={() => togglePicked(asset.ticker, asset.nameHe ?? asset.name)} style={{ padding: "4px 12px", borderRadius: 8, flexShrink: 0, fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "Heebo, sans-serif", transition: "all 0.18s", background: picked ? "rgba(52,211,153,0.14)" : "rgba(123,111,245,0.14)", border: picked ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(123,111,245,0.3)", color: picked ? "#34d399" : "#9d94f7" }}>
+                            <button onClick={() => togglePicked(asset.ticker, asset.name)} style={{ padding: "4px 12px", borderRadius: 8, flexShrink: 0, fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "Heebo, sans-serif", transition: "all 0.18s", background: picked ? "rgba(52,211,153,0.14)" : "rgba(123,111,245,0.14)", border: picked ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(123,111,245,0.3)", color: picked ? "#34d399" : "#9d94f7" }}>
                               {picked ? "הוסף ✓" : "+ הוספה"}
                             </button>
                           </div>
@@ -697,9 +697,9 @@ function PortfolioEntryScreen({
                     {visiblePopular.map((asset) => {
                       const picked = isPicked(asset.ticker);
                       return (
-                        <button key={asset.ticker} onClick={() => togglePicked(asset.ticker, asset.nameHe ?? asset.name)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: 10, width: "100%", background: picked ? "rgba(123,111,245,0.12)" : "rgba(255,255,255,0.025)", border: `1px solid ${picked ? "rgba(123,111,245,0.3)" : "rgba(255,255,255,0.06)"}`, cursor: "pointer", transition: "all 0.15s", fontFamily: "Heebo, sans-serif", direction: "rtl" }}>
+                        <button key={asset.ticker} onClick={() => togglePicked(asset.ticker, asset.name)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: 10, width: "100%", background: picked ? "rgba(123,111,245,0.12)" : "rgba(255,255,255,0.025)", border: `1px solid ${picked ? "rgba(123,111,245,0.3)" : "rgba(255,255,255,0.06)"}`, cursor: "pointer", transition: "all 0.15s", fontFamily: "Heebo, sans-serif", direction: "rtl" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={{ fontSize: "0.88rem", fontWeight: 600, color: picked ? "#d0d0ee" : "#a0a0c0" }}>{asset.nameHe ?? asset.name}</span>
+                            <span style={{ fontSize: "0.88rem", fontWeight: 600, color: picked ? "#d0d0ee" : "#a0a0c0" }}>{asset.name}</span>
                             <span style={{ fontSize: "0.7rem", fontWeight: 700, color: picked ? "#9d94f7" : "#585878", fontFamily: "JetBrains Mono, monospace", direction: "ltr" }}>{asset.ticker}</span>
                           </div>
                           <div style={{ width: 18, height: 18, borderRadius: "50%", flexShrink: 0, background: picked ? "rgba(52,211,153,0.18)" : "transparent", border: `1.5px solid ${picked ? "#34d399" : "rgba(255,255,255,0.12)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
@@ -1361,23 +1361,32 @@ function DashboardScreen({ assets, brief, onNav, onPlay, onGenerate, generating,
   useEffect(() => {
     if (!scheduleOpen) return;
     function dismiss(event: MouseEvent) {
-      if (scheduleRef.current && !scheduleRef.current.contains(event.target as Node)) setScheduleOpen(false);
+      const target = event.target as HTMLElement;
+      // The trigger button (.today-account, in TodayDashboard's sidebar) lives
+      // outside scheduleRef's subtree. Listening on "click" (not "mousedown")
+      // matters here: React's own onClick on that button fires before a
+      // document-level "click" listener (bubble phase runs inner-to-outer), so
+      // its toggle always resolves first — a "mousedown" listener would instead
+      // fire before the toggle, closing the panel and letting the toggle
+      // immediately reopen it, so a second click could never close it.
+      if (target.closest(".today-account")) return;
+      if (scheduleRef.current && !scheduleRef.current.contains(target)) setScheduleOpen(false);
     }
     function escape(event: KeyboardEvent) {
       if (event.key === "Escape") setScheduleOpen(false);
     }
-    document.addEventListener("mousedown", dismiss);
+    document.addEventListener("click", dismiss);
     document.addEventListener("keydown", escape);
     return () => {
-      document.removeEventListener("mousedown", dismiss);
+      document.removeEventListener("click", dismiss);
       document.removeEventListener("keydown", escape);
     };
   }, [scheduleOpen]);
   return <>
-    <TodayDashboard assets={assets} brief={brief} email={email} plan={plan} onNav={onNav} onSignOut={onSignOut} onGenerate={onGenerate} generating={generating} canGenerate={canGenerate} preview={preview} onPreferences={() => setScheduleOpen(true)}
+    <TodayDashboard assets={assets} brief={brief} email={email} plan={plan} onNav={onNav} onSignOut={onSignOut} onGenerate={onGenerate} generating={generating} canGenerate={canGenerate} preview={preview} onPreferences={() => setScheduleOpen((v) => !v)}
       player={<PlayerScreen key={brief?.id} brief={brief} onNav={onNav} embedded onOpenPlayer={onPlay}/>} />
-    {scheduleOpen && <div ref={scheduleRef} style={{ position: "fixed", left: "max(12px, min(230px, calc(100vw - 332px)))", top: 80, width: "min(320px, calc(100vw - 24px))", maxHeight: "calc(100vh - 100px)", overflowY: "auto", zIndex: 60 }}>
-      <button autoFocus aria-label="סגירת הגדרות פודקאסט" onClick={() => setScheduleOpen(false)} style={{ position: "absolute", left: 12, top: 12, zIndex: 61, color: "#9b9dae", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+    {scheduleOpen && <div ref={scheduleRef} style={{ position: "fixed", right: "max(12px, min(230px, calc(100vw - 332px)))", top: 80, width: "min(320px, calc(100vw - 24px))", maxHeight: "calc(100vh - 100px)", overflowY: "auto", zIndex: 60 }}>
+      <button autoFocus aria-label="סגירת הגדרות פודקאסט" onClick={() => setScheduleOpen(false)} style={{ position: "absolute", right: 12, top: 12, zIndex: 61, color: "#9b9dae", background: "none", border: "none", cursor: "pointer" }}>✕</button>
       <SchedulePanel {...schedule} inline onSave={async (data) => { await schedule.onSave(data); setScheduleOpen(false); }} />
     </div>}
   </>;
@@ -1635,9 +1644,6 @@ function SourcesScreen({ brief, onNav }: { brief: BriefView | null; onNav: (s: S
     </div>
   );
 }
-
-// ─── PortfolioSettingsScreen ──────────────────────────────────────────────────
-
 
 // ─── HistoryScreen ────────────────────────────────────────────────────────────
 function PortfolioSettingsScreen({ holdings, interests, onSave, onNav, onSignOut, email, plan, schedule }: {
