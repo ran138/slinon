@@ -66,8 +66,8 @@ function localDateTimeToUtc(
   return new Date(candidate);
 }
 
-export function targetMinutesForPlan(plan: PodcastPlan): 5 | 10 {
-  return plan === "daily" ? 5 : 10;
+export function targetMinutesForPlan(plan: PodcastPlan): 5 | 15 {
+  return plan === "daily" ? 5 : 15;
 }
 
 export function computeNextRunAt(schedule: PodcastSchedule, after = new Date()): string {
