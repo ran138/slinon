@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
         { source: "/", destination: "/marketing/index.html" },
         { source: "/about", destination: "/about/index.html" },
         { source: "/support.js", destination: "/about/support.js" },
-        { source: "/assets/slinon-logo.png", destination: "/about/assets/slinon-logo.png" },
+        { source: "/assets/slinon-logo.png", destination: "/marketing/assets/slinon-logo.png" },
         { source: "/styles.css", destination: "/marketing/styles.css" },
         { source: "/app.js", destination: "/marketing/app.js" },
         { source: "/og-image.png", destination: "/marketing/og-image.png" },
