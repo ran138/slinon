@@ -26,18 +26,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   if (!storedValue) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const { data: audio, error } = await supabase.storage.from(AUDIO_BUCKET).download(audioObjectPath(id, storedValue));
+  if (error || !audio) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // Redirect to a short-lived signed URL instead of downloading the whole
-  // file into memory here and slicing it ourselves — that previously meant
-  // every single Range request (including the browser's small initial
-  // probe) paid the cost of pulling the entire multi-MB episode out of
-  // Storage before responding with even the first byte, which is most of
-  // where the ~1.5s play-button delay was coming from. Supabase Storage's
-  // own CDN serves Range requests natively and far faster.
-  const { data: signed, error } = await supabase.storage
-    .from(AUDIO_BUCKET)
-    .createSignedUrl(audioObjectPath(id, storedValue), 60 * 30);
-  if (error || !signed?.signedUrl) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const bytes = Buffer.from(await audio.arrayBuffer());
+  const size = bytes.length;
+  const range = request.headers.get("range");
+  if (!range) return new Response(bytes, { headers: {
+    "Content-Type": "audio/mpeg", "Content-Length": String(size), "Accept-Ranges": "bytes", "Cache-Control": "private, max-age=3600",
+  } });
 
-  return NextResponse.redirect(signed.signedUrl, { status: 302 });
+  const match = /^bytes=(\d+)-(\d*)$/.exec(range);
+  if (!match) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
+  const start = Number(match[1]);
+  const end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  if (start > end || start >= size) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
+  const body = bytes.subarray(start, end + 1);
+  return new Response(body, { status: 206, headers: {
+    "Content-Type": "audio/mpeg", "Content-Length": String(body.length),
+    "Content-Range": `bytes ${start}-${end}/${size}`, "Accept-Ranges": "bytes",
+  } });
 }

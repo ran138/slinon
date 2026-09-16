@@ -1438,7 +1438,6 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed }: {
                 <audio
                   ref={audioRef}
                   src={brief.audioUrl}
-                  preload="auto"
                   onPlay={() => setPlaying(true)}
                   onPause={() => setPlaying(false)}
                   onTimeUpdate={(e) => setElapsed(e.currentTarget.currentTime)}
