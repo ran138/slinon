@@ -1652,10 +1652,28 @@ function PortfolioSettingsScreen({ holdings, interests, onSave, onNav, onSignOut
   schedule: Parameters<typeof SchedulePanel>[0];
 }) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const scheduleRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!scheduleOpen) return;
+    function dismiss(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      if (target.closest(".today-account")) return;
+      if (scheduleRef.current && !scheduleRef.current.contains(target)) setScheduleOpen(false);
+    }
+    function escape(event: KeyboardEvent) {
+      if (event.key === "Escape") setScheduleOpen(false);
+    }
+    document.addEventListener("click", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("click", dismiss);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [scheduleOpen]);
   return <>
-    <TrackingPage holdings={holdings} interests={interests} onSave={onSave} onNav={onNav} onSignOut={onSignOut} email={email} plan={plan} onPreferences={() => setScheduleOpen(true)}/>
-    {scheduleOpen && <div style={{ position: "fixed", left: "max(12px, min(230px, calc(100vw - 332px)))", top: 80, width: "min(320px, calc(100vw - 24px))", maxHeight: "calc(100vh - 100px)", overflowY: "auto", zIndex: 60 }}>
-      <button autoFocus aria-label="סגירת הגדרות פודקאסט" onClick={() => setScheduleOpen(false)} style={{ position: "absolute", left: 12, top: 12, zIndex: 61, color: "#9b9dae", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+    <TrackingPage holdings={holdings} interests={interests} onSave={onSave} onNav={onNav} onSignOut={onSignOut} email={email} plan={plan} onPreferences={() => setScheduleOpen((v) => !v)}/>
+    {scheduleOpen && <div ref={scheduleRef} style={{ position: "fixed", right: "max(12px, min(230px, calc(100vw - 332px)))", top: 80, width: "min(320px, calc(100vw - 24px))", maxHeight: "calc(100vh - 100px)", overflowY: "auto", zIndex: 60 }}>
+      <button autoFocus aria-label="סגירת הגדרות פודקאסט" onClick={() => setScheduleOpen(false)} style={{ position: "absolute", right: 12, top: 12, zIndex: 61, color: "#9b9dae", background: "none", border: "none", cursor: "pointer" }}>✕</button>
       <SchedulePanel {...schedule} inline onSave={async (data) => { await schedule.onSave(data); setScheduleOpen(false); }}/>
     </div>}
   </>;
