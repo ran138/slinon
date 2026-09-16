@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties, DragEvent, MouseEvent as ReactMouseEvent } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import type { BriefView, ProfileUpdate } from "@/lib/domain";
 import { Notice } from "@/components/notice";
 import { Logo } from "@/components/logo";
@@ -10,6 +10,9 @@ import { initAnalytics, identifyUser, resetAnalytics } from "@/lib/analytics";
 import { LegalFooter } from "@/components/legal/footer";
 import { TodayDashboard, TodayPlayerCard } from "@/components/today-dashboard";
 import { TrackingPage } from "@/components/tracking-page";
+import { HistoryPage } from "@/components/history-page";
+import { EpisodeDetail } from "@/components/episode-detail";
+import { AppSidebar } from "@/components/app-sidebar";
 import { INTERESTS, POPULAR_ASSETS, conceptKey, matchAsset, matchInterest, normalizeInterests, searchAssets, searchInterests } from "@/lib/onboarding";
 import { targetMinutesForPlan } from "@/lib/schedule";
 
@@ -41,22 +44,8 @@ interface WatchItem {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatSeconds(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, "0")}`;
-}
-
 function clamp(v: number, min: number, max: number) {
   return Math.min(Math.max(v, min), max);
-}
-
-function formatBriefTimestamp(iso: string) {
-  return new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
-}
-
-function fmtMs(ms?: number | null) {
-  return formatSeconds((ms ?? 0) / 1000);
 }
 
 // ─── Small shared components ──────────────────────────────────────────────────
@@ -1394,8 +1383,9 @@ function DashboardScreen({ assets, brief, onNav, onPlay, onGenerate, generating,
 
 // ─── PlayerScreen ─────────────────────────────────────────────────────────────
 
-function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed, embedded = false, onOpenPlayer }: {
+function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed, embedded = false, onOpenPlayer, onSignOut, email, plan }: {
   brief: BriefView | null; onNav: (s: Screen) => void; autoplay?: boolean; onAutoplayed?: () => void; embedded?: boolean; onOpenPlayer?: () => void;
+  onSignOut?: () => void; email?: string | null; plan?: "daily" | "weekly";
 }) {
   const [playing, setPlaying] = useState(autoplay);
   const [elapsed, setElapsed] = useState(0);
@@ -1427,7 +1417,7 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed, embedded =
 
   if (!brief) return <div className="min-h-screen flex items-center justify-center" style={{ color: "#9b9dae" }}>הבריף לא נמצא.</div>;
 
-  const totalDuration = brief.chapters.reduce((s, c) => s + (c.durationMs ?? 0), 0);
+  const totalDuration = brief.durationMs ?? brief.chapters.reduce((s, c) => s + (c.durationMs ?? 0), 0);
   const elapsedMs = elapsed * 1000;
   // The active chapter is derived from playback position within the single
   // continuous track, not stored separately — it's whichever chapter's
@@ -1437,7 +1427,6 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed, embedded =
     0,
     Math.max(0, brief.chapters.length - 1),
   );
-  const chapter = brief.chapters[activeChapter];
   const progress = totalDuration ? elapsedMs / totalDuration : 0;
 
   function seekTo(seconds: number) {
@@ -1451,198 +1440,35 @@ function PlayerScreen({ brief, onNav, autoplay = false, onAutoplayed, embedded =
     if (target) seekTo((target.startMs ?? 0) / 1000);
   }
 
-  function seek(e: ReactMouseEvent<HTMLDivElement>) {
-    if (!totalDuration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = clamp((e.clientX - rect.left) / rect.width, 0, 1);
-    seekTo(ratio * (totalDuration / 1000));
-  }
-
   if (embedded) return <TodayPlayerCard brief={brief} audioRef={audioRef} playing={playing} elapsed={elapsed} totalDuration={totalDuration} progress={progress} activeChapter={activeChapter} speed={speed}
     onSpeed={setSpeed} onToggle={() => setPlaying((value) => !value)} onSeek={seekTo} onSeekChapter={seekToChapter}
     onAudioPlay={() => setPlaying(true)} onAudioPause={() => setPlaying(false)} onAudioTime={setElapsed} onAudioEnd={() => setPlaying(false)} onOpenPlayer={onOpenPlayer ?? (() => onNav("player"))}/>;
 
-  return (
-    <div className="min-h-screen pb-16">
-      <div className="max-w-5xl mx-auto px-6 pt-8">
-        <button onClick={() => onNav("dashboard")} className="flex items-center gap-1.5 text-sm mb-6 transition-colors hover:opacity-70" style={{ color: "#9b9dae", background: "none", border: "none", cursor: "pointer" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
-          חזרה ללוח היום
-        </button>
-
-        <div className="grid gap-8 responsive-aside-grid" style={{ gridTemplateColumns: "1fr 280px" }}>
-          <div>
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold" style={{ color: "#f7f7fb" }}>{brief.title || `הפודקאסט של ${new Date(brief.createdAt).toLocaleDateString("he-IL", { day: "numeric", month: "long" })}`}</h1>
-              <p className="text-sm mt-1" style={{ color: "#9b9dae" }}><span style={{ direction: "rtl", unicodeBidi: "isolate" }}>{formatBriefTimestamp(brief.createdAt)}</span> · {formatSeconds(totalDuration / 1000)} · {brief.chapters.length} נושאים</p>
-            </div>
-
-            <div className="rounded-2xl p-6 mb-5 relative overflow-hidden" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
-              <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: "linear-gradient(90deg, #7b6ff5, #5b8af0)" }} />
-
-              {brief.audioUrl && (
-                <audio
-                  ref={audioRef}
-                  src={brief.audioUrl}
-                  preload="auto"
-                  onPlay={() => setPlaying(true)}
-                  onPause={() => setPlaying(false)}
-                  onTimeUpdate={(e) => setElapsed(e.currentTarget.currentTime)}
-                  onEnded={() => setPlaying(false)}
-                />
-              )}
-
-              <div className="flex items-center gap-2 mb-4">
-                <div className="px-2 py-0.5 rounded text-xs font-semibold" style={{ background: "rgba(123,111,245,0.15)", color: "#7b6ff5" }}>פרק {activeChapter + 1}</div>
-                {playing && (
-                  <div className="flex items-end gap-0.5 h-3">
-                    {[0, 1, 2].map((i) => (
-                      <div key={i} className="w-0.5 rounded-full" style={{ height: "100%", background: "#7b6ff5", animation: `waveform 0.8s ease-in-out ${i * 0.15}s infinite` }} />
-                    ))}
-                  </div>
-                )}
-              </div>
-              <h2 className="text-lg font-semibold mb-6" style={{ color: "#f7f7fb" }}>{chapter?.title}</h2>
-
-              <div className="rounded-lg overflow-hidden cursor-pointer relative" style={{ background: "#181a26", padding: 8, marginBottom: 8 }} onClick={seek}>
-                <div className="flex items-end gap-px" style={{ height: 56, direction: "ltr" }}>
-                  {Array.from({ length: 80 }).map((_, i) => {
-                    const played = i / 80 < progress;
-                    return <div key={i} className="flex-1 rounded-sm" style={{ height: `${25 + Math.sin(i * 0.35) * 20 + Math.abs(Math.sin(i * 0.8)) * 25}%`, background: played ? "linear-gradient(to top, #7b6ff5, #5b8af0)" : "#292c3d" }} />;
-                  })}
-                </div>
-                {totalDuration > 0 && brief.chapters.slice(1).map((c) => (
-                  <div
-                    key={c.id}
-                    title={c.title}
-                    className="absolute rounded-full"
-                    style={{
-                      left: `calc(8px + (100% - 16px) * ${(c.startMs ?? 0) / totalDuration})`,
-                      width: 6, height: 6, top: "50%", transform: "translate(-50%, -50%)",
-                      background: "#f7f7fb", boxShadow: "0 0 0 2px #181a26", pointerEvents: "none",
-                    }}
-                  />
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between mb-5 text-xs font-mono" style={{ color: "#565968", direction: "ltr" }}>
-                <span>{formatSeconds(elapsed)}</span>
-                <span>{fmtMs(totalDuration)}</span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <button onClick={() => setSpeed(speed === 1 ? 1.5 : speed === 1.5 ? 2 : speed === 2 ? 0.5 : 1)} className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold transition-colors hover:bg-white/5" style={{ color: "#9b9dae", border: "1px solid #292c3d", background: "none", cursor: "pointer" }}>{speed}×</button>
-
-                <div className="flex items-center gap-4">
-                  <button onClick={() => activeChapter > 0 && seekToChapter(activeChapter - 1)} disabled={activeChapter === 0} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors" style={{ color: "#9b9dae", background: "none", border: "none", cursor: activeChapter === 0 ? "not-allowed" : "pointer", opacity: activeChapter === 0 ? 0.35 : 1 }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20" /><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" strokeWidth="2" fill="none" /></svg>
-                  </button>
-                  <button
-                    onClick={() => setPlaying((p) => !p)}
-                    disabled={!brief.audioUrl}
-                    className="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-                    style={{ background: "linear-gradient(135deg, #7b6ff5, #5b8af0)", border: "none", cursor: brief.audioUrl ? "pointer" : "not-allowed", opacity: brief.audioUrl ? 1 : 0.4 }}
-                  >
-                    {playing ? (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
-                    ) : (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3" /></svg>
-                    )}
-                  </button>
-                  <button onClick={() => activeChapter < brief.chapters.length - 1 && seekToChapter(activeChapter + 1)} disabled={activeChapter === brief.chapters.length - 1} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/5 transition-colors" style={{ color: "#9b9dae", background: "none", border: "none", cursor: activeChapter === brief.chapters.length - 1 ? "not-allowed" : "pointer", opacity: activeChapter === brief.chapters.length - 1 ? 0.35 : 1 }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4" /><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth="2" fill="none" /></svg>
-                  </button>
-                </div>
-
-                <button onClick={() => onNav("sources")} className="px-2.5 py-1 rounded-md text-xs font-semibold transition-colors hover:bg-white/5" style={{ color: "#7b6ff5", border: "1px solid rgba(123,111,245,0.25)", background: "none", cursor: "pointer" }}>מקורות</button>
-              </div>
-
-              <p style={{ marginTop: 24, fontSize: "0.9rem", lineHeight: 1.85, color: "#c4c4d6", whiteSpace: "pre-wrap" }}>{chapter?.script}</p>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "#565968" }}>פרקים</h3>
-            <div className="space-y-1">
-              {brief.chapters.map((ch, i) => {
-                const isActive = i === activeChapter;
-                const isDone = i < activeChapter;
-                return (
-                  <button key={ch.id} onClick={() => seekToChapter(i)} className="w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all text-right" style={{ background: isActive ? "rgba(123,111,245,0.15)" : "transparent", border: `1px solid ${isActive ? "rgba(123,111,245,0.2)" : "transparent"}`, cursor: "pointer" }}>
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: isDone ? "rgba(52,211,153,0.15)" : isActive ? "rgba(123,111,245,0.15)" : "#181a26" }}>
-                      {isDone ? (
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
-                      ) : (
-                        <span className="text-xs font-mono" style={{ color: isActive ? "#7b6ff5" : "#565968" }}>{ch.position ?? i + 1}</span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-right truncate" style={{ color: isActive ? "#7b6ff5" : isDone ? "#9b9dae" : "#f7f7fb" }}>{ch.title}</p>
-                      <p className="text-xs font-mono mt-0.5" style={{ color: "#565968" }}>{fmtMs(ch.startMs)}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <EpisodeDetail brief={brief} onNav={onNav} onPreferences={() => onNav("settings-portfolio")} onSignOut={onSignOut ?? (() => {})} email={email ?? null} plan={plan ?? "daily"} activeChapter={activeChapter} onChapter={seekToChapter} onSources={() => onNav("sources")} speed={speed} onSpeed={setSpeed}>
+    <TodayPlayerCard brief={brief} audioRef={audioRef} playing={playing} elapsed={elapsed} totalDuration={totalDuration} progress={progress} activeChapter={activeChapter} speed={speed}
+      onSpeed={setSpeed} onToggle={() => setPlaying((value) => !value)} onSeek={seekTo} onSeekChapter={seekToChapter}
+      onAudioPlay={() => setPlaying(true)} onAudioPause={() => setPlaying(false)} onAudioTime={setElapsed} onAudioEnd={() => setPlaying(false)} onOpenPlayer={() => {}}/>
+  </EpisodeDetail>;
 }
 
 // ─── SourcesScreen ────────────────────────────────────────────────────────────
 
-function SourcesScreen({ brief, onNav }: { brief: BriefView | null; onNav: (s: Screen) => void }) {
-  if (!brief) return <div className="min-h-screen flex items-center justify-center" style={{ color: "#9b9dae" }}>הבריף לא נמצא.</div>;
-
-  const grouped = brief.chapters.map((ch) => ({ chapter: ch, sources: brief.sources.filter((s) => s.chapterId === ch.id) })).filter((g) => g.sources.length > 0);
-
-  return (
-    <div className="min-h-screen pb-16">
-      <div className="max-w-3xl mx-auto px-6 pt-8">
-        <button onClick={() => onNav("player")} className="flex items-center gap-1.5 text-sm mb-6 transition-colors hover:opacity-70" style={{ color: "#9b9dae", background: "none", border: "none", cursor: "pointer" }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
-          חזרה לנגן
-        </button>
-
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold" style={{ color: "#f7f7fb" }}>מקורות</h1>
-          <p className="mt-1 text-sm" style={{ color: "#9b9dae" }}>כל הטענות בפודקאסט מגובות במקורות אלה</p>
-        </div>
-
-        {!grouped.length ? (
-          <div className="rounded-2xl p-6 text-center" style={{ background: "#11131e", border: "1px solid #292c3d", color: "#9b9dae" }}>לא נמצאו מקורות עבור הבריף הזה.</div>
-        ) : (
-          <div className="space-y-8">
-            {grouped.map(({ chapter, sources }) => (
-              <div key={chapter.id}>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono flex-shrink-0" style={{ background: "rgba(123,111,245,0.15)", color: "#7b6ff5" }}>{chapter.position}</div>
-                  <h2 className="text-sm font-semibold" style={{ color: "#f7f7fb" }}>{chapter.title}</h2>
-                </div>
-                <div className="space-y-2 mr-9">
-                  {sources.map((s) => (
-                    <a key={s.id} href={s.url} target="_blank" rel="noopener noreferrer" className="flex items-start justify-between p-4 rounded-xl transition-all hover:border-white/10 group block" style={{ background: "#11131e", border: "1px solid #292c3d" }}>
-                      <div className="flex-1 min-w-0 ml-3">
-                        <p className="text-sm font-medium leading-snug" style={{ color: "#f7f7fb" }}>{s.title}</p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          {s.publisher && <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ background: "#181a26", color: "#9b9dae" }}>{s.publisher}</span>}
-                        </div>
-                      </div>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0 mt-0.5 opacity-30 group-hover:opacity-70 transition-opacity" style={{ color: "#f7f7fb" }}>
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
-                      </svg>
-                    </a>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function SourcesScreen({ brief, onNav, onSignOut, email, plan }: {
+  brief: BriefView | null; onNav: (s: Screen) => void; onSignOut: () => void; email: string | null; plan: "daily" | "weekly";
+}) {
+  const grouped = brief?.chapters.map((chapter, i) => ({chapter, number: i + 1, sources: brief.sources.filter(s => s.chapterId === chapter.id)})).filter(g => g.sources.length > 0) ?? [];
+  return <div className="today-shell sources-shell" dir="ltr">
+    <AppSidebar active="history" onNav={onNav} onPreferences={() => onNav("settings-portfolio")} onSignOut={onSignOut} email={email} plan={plan}/>
+    <main className="today-content sources-content" dir="rtl">
+      <button className="episode-back" onClick={() => onNav("player")}><span aria-hidden="true">←</span>חזרה לנגן</button>
+      <header className="episode-header sources-header"><div><span className="episode-eyebrow">מאחורי הפודקאסט</span><h1>מקורות</h1><p>כל הטענות בפודקאסט מגובות במקורות אלה</p>{brief?.title && <h2>{brief.title}</h2>}</div></header>
+      {!grouped.length ? <div className="today-card sources-empty"><h2>{brief ? "לא נמצאו מקורות עבור הפודקאסט הזה." : "הפודקאסט לא נמצא."}</h2><p>אפשר לחזור לנגן ולהמשיך להאזין.</p><button onClick={() => onNav("player")}>חזרה לנגן</button></div> :
+        <div className="sources-groups">{grouped.map(({chapter, number, sources}) => <section key={chapter.id} className="today-card sources-group">
+          <h2><span className="episode-chapter-number">{number}</span><bdi dir="auto">{chapter.title}</bdi><small>{sources.length} מקורות</small></h2>
+          <div className="sources-links">{sources.map(s => <a key={s.id} href={s.url} target="_blank" rel="noopener noreferrer"><div><h3><bdi dir="auto">{s.title}</bdi></h3>{s.publisher && <span>{s.publisher}</span>}</div><span aria-hidden="true">↗</span></a>)}</div>
+        </section>)}</div>}
+    </main>
+  </div>;
 }
 
 // ─── HistoryScreen ────────────────────────────────────────────────────────────
@@ -1679,71 +1505,19 @@ function PortfolioSettingsScreen({ holdings, interests, onSave, onNav, onSignOut
   </>;
 }
 
-function weekBucket(d: Date) {
-  const diff = Date.now() - d.getTime();
-  if (diff < 7 * 86400000) return "השבוע";
-  if (diff < 14 * 86400000) return "שבוע שעבר";
-  return d.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
-}
-
-function HistoryScreen({ briefs, onOpen, onPlay }: { briefs: BriefView[]; onOpen: (id: string) => void; onPlay: (id: string) => void }) {
-  const groups: { label: string; items: BriefView[] }[] = [];
-  for (const b of briefs) {
-    const label = weekBucket(new Date(b.createdAt));
-    const existing = groups.find((g) => g.label === label);
-    if (existing) existing.items.push(b);
-    else groups.push({ label, items: [b] });
-  }
-
-  return (
-    <div className="min-h-screen pb-16">
-      <div className="max-w-3xl mx-auto px-6 pt-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold" style={{ color: "#f7f7fb" }}>היסטוריית הפודקאסטים שלך</h1>
-          <p className="mt-1 text-sm" style={{ color: "#9b9dae" }}>כאן אפשר לראות את כל הפודקאסטים הקודמים שנוצרו עבורך.</p>
-        </div>
-
-        {!briefs.length ? (
-          <div className="rounded-2xl p-10 text-center" style={{ background: "#11131e", border: "1px solid #292c3d", color: "#9b9dae" }}>עדיין אין בריפים בארכיון.</div>
-        ) : (
-          <div className="space-y-8">
-            {groups.map((group) => (
-              <div key={group.label}>
-                <p style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#565968", marginBottom: 10 }}>{group.label}</p>
-                <div className="space-y-2">
-                  {group.items.map((b) => {
-                    const dur = b.chapters.reduce((s, c) => s + (c.durationMs ?? 0), 0);
-                    return (
-                      <div key={b.id} className="rounded-2xl overflow-hidden transition-all" style={{ background: "linear-gradient(155deg, rgba(22,22,34,0.98) 0%, rgba(16,16,28,0.99) 100%)", border: "1px solid rgba(255,255,255,0.07)", boxShadow: "0 0 0 1px rgba(255,255,255,0.02) inset, 0 2px 12px rgba(0,0,0,0.3)" }}>
-                        <div className="flex items-center gap-4 px-5 py-4" style={{ direction: "rtl" }}>
-                          <button onClick={() => onPlay(b.id)} className="flex-shrink-0 transition-all hover:scale-105 active:scale-95" style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(123,111,245,0.13)", border: "1px solid rgba(123,111,245,0.25)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="#9d94f7" stroke="none"><polygon points="6 3 20 12 6 21 6 3" /></svg>
-                          </button>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p className="font-semibold" style={{ fontSize: "0.92rem", color: "#f7f7fb", margin: 0 }}>{b.title || `הפודקאסט של ${new Date(b.createdAt).toLocaleDateString("he-IL", { day: "numeric", month: "long" })}`}</p>
-                            <div className="flex items-center gap-2 mt-0.5" style={{ direction: "ltr", justifyContent: "flex-end" }}>
-                              <span style={{ fontSize: "0.72rem", color: "#565968", direction: "rtl", unicodeBidi: "isolate" }}>{formatBriefTimestamp(b.createdAt)}</span>
-                              <span style={{ fontSize: "0.65rem", color: "#565968" }}>·</span>
-                              <span style={{ fontSize: "0.72rem", color: "#565968", fontFamily: "JetBrains Mono, monospace" }}>{formatSeconds(dur / 1000)}</span>
-                              <span style={{ fontSize: "0.65rem", color: "#565968" }}>·</span>
-                              <span style={{ fontSize: "0.72rem", color: "#565968" }}>{b.chapters.length} נושאים</span>
-                            </div>
-                          </div>
-                          <button onClick={() => onOpen(b.id)} style={{ padding: "5px 14px", borderRadius: 8, flexShrink: 0, fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "Heebo, sans-serif", background: "rgba(123,111,245,0.1)", border: "1px solid rgba(123,111,245,0.22)", color: "#7b6ff5" }}>
-                            פתח פודקאסט
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function HistoryScreen({ briefs, onOpen, onPlay, onNav, onSignOut, email, plan, schedule }: {
+  briefs: BriefView[]; onOpen: (id: string) => void; onPlay: (id: string) => void;
+  onNav: (s: Screen) => void; onSignOut: () => void; email: string | null; plan: "daily" | "weekly";
+  schedule: Parameters<typeof SchedulePanel>[0];
+}) {
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  return <>
+    <HistoryPage briefs={briefs} onOpen={onOpen} onPlay={onPlay} onNav={onNav} onSignOut={onSignOut} email={email} plan={plan} onPreferences={() => setScheduleOpen(true)}/>
+    {scheduleOpen && <div style={{ position: "fixed", left: "max(12px, min(230px, calc(100vw - 332px)))", top: 80, width: "min(320px, calc(100vw - 24px))", maxHeight: "calc(100vh - 100px)", overflowY: "auto", zIndex: 60 }}>
+      <button autoFocus aria-label="סגירת הגדרות פודקאסט" onClick={() => setScheduleOpen(false)} style={{ position: "absolute", left: 12, top: 12, zIndex: 61, color: "#9b9dae", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+      <SchedulePanel {...schedule} inline onSave={async (data) => { await schedule.onSave(data); setScheduleOpen(false); }}/>
+    </div>}
+  </>;
 }
 
 // ─── App shell ────────────────────────────────────────────────────────────────
@@ -1816,16 +1590,16 @@ export function VestoryApp() {
       return;
     }
 
-    if (previewScreen === "today" || previewScreen === "today-empty") {
+    if (previewScreen === "today" || previewScreen === "today-empty" || previewScreen === "history") {
       // Explicit localhost-only QA fixture; never used for signed-in production data.
       setTodayPreview(true);
       setProfile({ ...EMPTY_PROFILE, onboardingComplete: true, assets: [{ kind: "holding", symbol: "SPY", name: "S&P 500" }, { kind: "holding", symbol: "QQQ", name: "Nasdaq 100" }, { kind: "watchlist", symbol: "SPXL", name: "Direxion Daily S&P 500" }, { kind: "watchlist", symbol: "TQQQ", name: "ProShares UltraPro QQQ" }], interests: [{ label: "AI" }] });
-      if (previewScreen === "today") {
+      if (previewScreen === "today" || previewScreen === "history") {
         // Same-origin QA audio preserves the existing media-src security policy.
         const demo: BriefView = { id: "local-today-qa", title: "עדכון שוק שבועי: בינה מלאכותית, מניות ותשואות אג״ח", audioUrl: "/assets/local-today-qa.wav", status: "completed", progress: 100, stageLabel: "דוגמה מקומית", targetMinutes: 5, durationMs: 90000, errorMessage: null, createdAt: new Date().toISOString(), completedAt: new Date().toISOString(), sources: [], chapters: [{ id: "qa-ai", position: 0, title: "בינה מלאכותית: רגולציה ורכישה אפשרית", script: "", reasonKind: "interest", reasonLabel: "AI", durationMs: 52000, startMs: 0, audioUrl: null }, { id: "qa-market", position: 1, title: "מניות, תשואות ונפט", script: "", reasonKind: "portfolio", reasonLabel: "SPY", durationMs: 38000, startMs: 52000, audioUrl: null }] };
         setBriefs([demo]); setActiveBriefId(demo.id);
       }
-      setScreen("dashboard"); setLoading(false); return;
+      setScreen(previewScreen === "history" ? "history" : "dashboard"); setLoading(false); return;
     }
 
     if (previewScreen === "preferences" || previewScreen === "welcome" || previewScreen === "onboarding") {
@@ -1970,7 +1744,7 @@ export function VestoryApp() {
 
   return (
     <div className="vestory-ui" style={{ minHeight: "100%", background: "#080910" }}>
-      {screen !== "dashboard" && screen !== "settings-portfolio" && <TopBar
+      {screen !== "dashboard" && screen !== "settings-portfolio" && screen !== "history" && screen !== "player" && screen !== "sources" && <TopBar
         onNav={goTo}
         screen={screen}
         onSignOut={() => void handleSignOut()}
@@ -2030,9 +1804,9 @@ export function VestoryApp() {
         <DashboardScreen assets={profile.assets.map(assetToHolding)} brief={activeBrief} onNav={goTo} onPlay={playBrief} onGenerate={() => void handleGenerateFromDashboard()} generating={generating} email={profile.email} plan={profile.podcastPlan} onSignOut={() => void handleSignOut()} canGenerate={profile.assets.length > 0 || profile.interests.length > 0} preview={todayPreview} schedule={{ podcastPlan: profile.podcastPlan, scheduleTime: profile.scheduleTime, scheduleDay: profile.scheduleDay, nextRunAt: profile.nextRunAt, notifyByEmail: profile.notifyByEmail, onSave: handleSaveSchedule }} />
       )}
       {screen === "player" && (
-        <PlayerScreen brief={activeBrief} onNav={goTo} autoplay={playOnEnter} onAutoplayed={() => setPlayOnEnter(false)} />
+        <PlayerScreen brief={activeBrief} onNav={goTo} autoplay={playOnEnter} onAutoplayed={() => setPlayOnEnter(false)} onSignOut={() => void handleSignOut()} email={profile.email} plan={profile.podcastPlan} />
       )}
-      {screen === "sources" && <SourcesScreen brief={activeBrief} onNav={goTo} />}
+      {screen === "sources" && <SourcesScreen brief={activeBrief} onNav={goTo} onSignOut={() => void handleSignOut()} email={profile.email} plan={profile.podcastPlan} />}
       {screen === "settings-portfolio" && (
         <PortfolioSettingsScreen
           holdings={holdings}
@@ -2046,9 +1820,9 @@ export function VestoryApp() {
         />
       )}
       {screen === "history" && (
-        <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} onPlay={(id) => playBrief(id)} />
+        <HistoryScreen briefs={briefs} onOpen={(id) => { setActiveBriefId(id); goTo("player"); }} onPlay={(id) => playBrief(id)} onNav={goTo} onSignOut={() => void handleSignOut()} email={profile.email} plan={profile.podcastPlan} schedule={{ podcastPlan: profile.podcastPlan, scheduleTime: profile.scheduleTime, scheduleDay: profile.scheduleDay, nextRunAt: profile.nextRunAt, notifyByEmail: profile.notifyByEmail, onSave: handleSaveSchedule }}/>
       )}
-      <div className={screen === "dashboard" || screen === "settings-portfolio" ? "today-legal-footer" : undefined}><LegalFooter /></div>
+      <div className={screen === "dashboard" || screen === "settings-portfolio" || screen === "history" || screen === "player" || screen === "sources" ? "today-legal-footer" : undefined}><LegalFooter /></div>
     </div>
   );
 }

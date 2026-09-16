@@ -13,6 +13,7 @@ function filesUnder(path: string, predicate: (name: string) => boolean): string[
 describe("Today dashboard regressions", () => {
   const dashboard = readRepositoryFile("product/components/today-dashboard.tsx");
   const app = readRepositoryFile("product/components/vestory-app.tsx");
+  const episode = readRepositoryFile("product/components/episode-detail.tsx");
   const styles = readRepositoryFile("product/app/globals.css");
 
   it("uses a real Jerusalem-time greeting for all four parts of the day", () => {
@@ -36,12 +37,15 @@ describe("Today dashboard regressions", () => {
     expect(styles).toContain(".today-chapter-marker");
   });
 
-  it("preserves the full-player speed cycle including half speed", () => {
-    expect(app).toContain("speed === 1 ? 1.5 : speed === 1.5 ? 2 : speed === 2 ? 0.5 : 1");
+  it("preserves selectable full-player speeds including half speed", () => {
+    expect(episode).toContain('aria-label="מהירות ניגון" value={speed}');
+    expect(episode).toContain("[.5,1,1.25,1.5,2]");
+    expect(episode).toContain("onSpeed(Number(e.target.value))");
+    expect(app).toContain("onSpeed={setSpeed}");
   });
 
   it("shows chapter start time rather than chapter duration", () => {
-    expect(app).toContain("fmtMs(ch.startMs)");
+    expect(episode).toContain("time(c.startMs??0)");
     expect(dashboard).toContain("time(chapter.startMs / 1000)");
   });
 

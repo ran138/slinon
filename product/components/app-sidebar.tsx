@@ -5,7 +5,7 @@ import { Logo } from "@/components/logo";
 
 export type AppDestination = "dashboard" | "settings-portfolio" | "history" | "player" | "sources";
 export function AppSidebar({ active, email, plan, onNav, onPreferences, onSignOut }: {
-  active: "dashboard" | "settings-portfolio"; email: string | null; plan: "daily" | "weekly";
+  active: "dashboard" | "settings-portfolio" | "history"; email: string | null; plan: "daily" | "weekly";
   onNav: (screen: AppDestination) => void; onPreferences: () => void; onSignOut: () => void;
 }) {
   return (
@@ -24,4 +24,3 @@ export function AppSidebar({ active, email, plan, onNav, onPreferences, onSignOu
     </aside>
   );
 }
-
