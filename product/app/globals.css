@@ -173,7 +173,7 @@ svg { width:1.1rem; height:1.1rem; }
 /* Today desktop workspace — deliberately scoped, leaving other screens unchanged. */
 .today-shell { --today-border:rgba(92,132,220,.2); --today-muted:#9faed1; min-height:calc(100vh - 60px); background:radial-gradient(ellipse at 70% 0%,#111d3c55,transparent 60%),#050d1b; color:#f2f4ff; }
 .today-sidebar { position:fixed; inset:0 0 0 auto; z-index:30; width:238px; padding:34px 20px 25px; display:flex; flex-direction:column; background:radial-gradient(ellipse at 100% 0%,#17327377,transparent 55%),linear-gradient(175deg,#0a1731,#07132b); border-left:1px solid #28427288; }
-.today-brand { text-align:left; padding:2px 9px; }
+.today-brand { text-align:center; padding:2px 9px; }
 .today-brand strong { display:block; font-size:28px; line-height:1.2; letter-spacing:.01em; }
 .today-brand span { display:block; color:#a6b6df; font-size:11px; margin-top:10px; }
 .today-sidebar nav { display:grid; gap:13px; margin-top:38px; }
